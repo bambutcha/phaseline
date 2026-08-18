@@ -2,8 +2,8 @@ package sim
 
 type GhostPoint struct {
 	T float64 `json:"t"`
-	Q       int     `json:"q"`
-	R       int     `json:"r"`
+	Q int     `json:"q"`
+	R int     `json:"r"`
 }
 
 type GhostReplay struct {

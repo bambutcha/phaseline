@@ -4,6 +4,7 @@ import "sort"
 
 type Snapshot struct {
 	Seed            string       `json:"seed"`
+	Layout          string       `json:"layout,omitempty"`
 	Status          GameStatus   `json:"status"`
 	Outcome         Outcome      `json:"outcome,omitempty"`
 	EndReason       string       `json:"endReason,omitempty"`
@@ -93,6 +94,7 @@ func (s *GameState) Snapshot() Snapshot {
 	}
 	snap := Snapshot{
 		Seed:            s.Seed,
+		Layout:          s.Layout,
 		Status:          s.Status,
 		Outcome:         s.Outcome,
 		EndReason:       s.EndReason,

@@ -12,13 +12,17 @@ func (s *GameState) Tick(dt float64) []Event {
 	start := len(s.Events)
 	s.T += dt
 	s.Terminator = s.Terminator.Advance(dt)
+	s.rescueDropoffs()
 
 	sel := s.Active
+	keepType := s.R().Type
+	s.retargetCargoRoutes()
 	for i := range s.Rovers {
 		s.Active = i
 		s.tickRover(dt)
 	}
 	s.Active = sel
+	s.SelectRover(keepType)
 
 	s.tickCargo(dt)
 	s.tickCrisis()
@@ -28,6 +32,11 @@ func (s *GameState) Tick(dt float64) []Event {
 
 func (s *GameState) tickRover(dt float64) {
 	r := s.R()
+	if r.State != RoverStranded && s.InShadow(r.Q, r.R) {
+		s.tickBattery(dt)
+		s.caughtByShadow()
+		return
+	}
 	if r.State == RoverMoving {
 		s.tickMove(dt)
 	}
@@ -46,6 +55,19 @@ func (s *GameState) tickRover(dt float64) {
 	}
 }
 
+func (s *GameState) caughtByShadow() {
+	r := s.R()
+	if r.State == RoverStranded {
+		return
+	}
+	s.failCarried(ContractLostShadow)
+	r.State = RoverStranded
+	r.Path = nil
+	r.Progress = 0
+	r.Reversing = false
+	s.emit("stranded", map[string]any{"rover": string(r.Type), "hexId": HexID(r.Q, r.R), "reason": "shadow"})
+}
+
 func (s *GameState) tickMove(dt float64) {
 	r := s.R()
 	if r.Reversing {
@@ -60,10 +82,11 @@ func (s *GameState) tickMove(dt float64) {
 	}
 	next := r.Path[0]
 	hex, ok := s.Map[next.ID()]
-	if !ok || hex.Impassable {
+	if !ok || hex.Impassable || s.InShadow(next.Q, next.R) {
 		r.State = RoverIdle
 		r.Path = nil
 		r.Progress = 0
+		s.emit("rejected", map[string]any{"reason": "shadow", "hexId": next.ID()})
 		return
 	}
 	cost := s.MoveCost(hex)
@@ -82,7 +105,7 @@ func (s *GameState) tickMove(dt float64) {
 	}
 
 	prevShadow := s.InShadow(r.Q, r.R)
-	r.Battery -= cost
+	r.Battery -= cost * MoveDrainMult
 	if r.Battery <= 0 {
 		r.Battery = 0
 		r.Q, r.R = next.Q, next.R
@@ -191,6 +214,22 @@ func (s *GameState) continueJob() {
 	if next == "" || next == here {
 		return
 	}
+	if ax, err := ParseHexID(next); err == nil && s.Terminator.InShadow(ax.Q) {
+		s.rescueDropoffs()
+		next = ""
+		for _, c := range s.Contracts {
+			if c.AssignedTo != r.Type {
+				continue
+			}
+			if c.Status == ContractInTransit && c.Dropoff != here {
+				next = c.Dropoff
+				break
+			}
+		}
+		if next == "" || next == here {
+			return
+		}
+	}
 	_ = s.GoTo(next)
 }
 
@@ -204,6 +243,9 @@ func (s *GameState) tickBattery(dt float64) {
 		if s.hasCargo(CargoO2) {
 			drain *= 2
 		}
+	}
+	if s.CommUntil > 0 && s.T < s.CommUntil {
+		drain *= 1.35
 	}
 	r.Battery -= drain
 
@@ -316,31 +358,46 @@ func (s *GameState) caveIn() {
 }
 
 func (s *GameState) addVIP() {
-	r := s.R()
-	drop := HexID(r.Q, r.R)
-	ids := make([]string, 0)
-	for id, h := range s.Map {
-		if h.Type == TypeBase {
-			ids = append(ids, id)
+	used := map[string]bool{}
+	for _, c := range s.Contracts {
+		if c.Status == ContractQueued || c.Status == ContractAccepted || c.Status == ContractInTransit {
+			used[c.Pickup] = true
 		}
 	}
+	for _, r := range s.Rovers {
+		used[HexID(r.Q, r.R)] = true
+	}
+	ids := make([]string, 0, len(s.Map))
+	for id := range s.Map {
+		ids = append(ids, id)
+	}
 	sort.Strings(ids)
-	if len(ids) > 0 {
-		drop = ids[0]
+	drop := s.litDropoff()
+	pickup := ""
+	for _, id := range ids {
+		h := s.Map[id]
+		if used[id] || h.Type == TypeBase || h.Impassable || s.Terminator.InShadow(h.Q) {
+			continue
+		}
+		pickup = id
+		break
+	}
+	if pickup == "" {
+		return
 	}
 	s.Contracts = append(s.Contracts, Contract{
 		ID:          "vip",
 		Title:       "VIP Override — срочный груз",
 		Cargo:       CargoMedSeeds,
 		Weight:      WeightClassLight,
-		Pickup:      HexID(r.Q, r.R),
+		Pickup:      pickup,
 		Dropoff:     drop,
-		ColonyValue: 40,
-		EarthValue:  10,
-		Reward:      50,
+		ColonyValue: 22,
+		EarthValue:  8,
+		Reward:      30,
 		Risk:        "high",
 		Urgency:     "high",
-		Deadline:    45,
+		Deadline:    55,
 		Status:      ContractQueued,
 	})
 }
@@ -364,7 +421,7 @@ func (s *GameState) tryPickupDrop() {
 			s.dropCargo(c.Cargo)
 			bonus := 0
 			if c.Cargo == CargoCommRelay && !s.CrisisFired {
-				bonus = 15
+				bonus = 8
 			}
 			s.ColonyScore += c.ColonyValue + bonus
 			s.EarthScore += c.EarthValue

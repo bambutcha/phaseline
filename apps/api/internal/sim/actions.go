@@ -55,7 +55,8 @@ func (s *GameState) Dispatch(id string) error {
 	}
 	c := s.Contracts[idx]
 	if c.AssignedTo != "" && c.AssignedTo != s.R().Type {
-		s.SelectRover(c.AssignedTo)
+		s.reject("wrong_rover", id)
+		return nil
 	}
 	if s.R().State == RoverStranded {
 		s.reject("stranded", id)
@@ -73,6 +74,8 @@ func (s *GameState) Dispatch(id string) error {
 	r := s.R()
 	target := c.Pickup
 	if c.Status == ContractInTransit || HexID(r.Q, r.R) == c.Pickup {
+		s.rescueDropoffs()
+		c = s.Contracts[idx]
 		target = c.Dropoff
 	}
 	return s.GoTo(target)

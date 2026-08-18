@@ -135,6 +135,7 @@ type Event struct {
 
 type GameState struct {
 	Seed         string
+	Layout       string
 	Status       GameStatus
 	Outcome      Outcome
 	T            float64

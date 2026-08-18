@@ -39,22 +39,19 @@ func terrainMod(rover RoverType, tile HexType) float64 {
 	}
 }
 
-func shadowMod(inShadow bool) float64 {
-	if inShadow {
-		return ShadowMod
-	}
-	return 1.0
-}
-
 func (s *GameState) MoveCost(hex Hex) float64 {
 	return s.moveCostAt(hex, s.WeightMod(), s.Terminator.InShadow(hex.Q))
 }
 
 func (s *GameState) moveCostAt(hex Hex, weightMod float64, inShadow bool) float64 {
-	if hex.Impassable {
+	if hex.Impassable || inShadow {
 		return math.Inf(1)
 	}
-	return BaseMoveCost(hex.Type) * weightMod * terrainMod(s.R().Type, hex.Type) * shadowMod(inShadow)
+	cost := BaseMoveCost(hex.Type) * weightMod * terrainMod(s.R().Type, hex.Type)
+	if s.DustStorm && hex.Type == TypeDustField {
+		cost *= 1.45
+	}
+	return cost
 }
 
 func (s *GameState) roverSpeed() float64 {

@@ -1,6 +1,9 @@
 package sim
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func TestSwiftRejectsHeavy(t *testing.T) {
 	s := NewGame("MCC-TEST", RoverSwift)
@@ -95,13 +98,14 @@ func TestGoToTurnsWithoutRewind(t *testing.T) {
 		}
 		if n == 0 {
 			a = h.Axial()
-		} else {
-			b = h.Axial()
-			break
+			n++
+			continue
 		}
+		b = h.Axial()
 		n++
+		break
 	}
-	if a == (Axial{}) || b == (Axial{}) {
+	if n < 2 {
 		t.Fatal("need two dests")
 	}
 	if err := s.GoTo(a.ID()); err != nil {
@@ -218,22 +222,19 @@ func TestShiftContinuesAfterJobsFail(t *testing.T) {
 	}
 }
 
-func TestSeedHasImpossibleAndHeavy(t *testing.T) {
+func TestSeedHasHeavy(t *testing.T) {
 	s := NewGame("MCC-TEST", RoverSwift)
-	heavy, impossible := false, false
+	heavy := false
 	for _, c := range s.Contracts {
 		if c.Weight == WeightClassHeavy {
 			heavy = true
 		}
 		if c.Impossible {
-			impossible = true
+			t.Fatal("no bait jobs — every contract should be a real delivery")
 		}
 	}
 	if !heavy {
 		t.Fatal("need a heavy contract")
-	}
-	if !impossible {
-		t.Fatal("need one intentionally near-impossible delivery")
 	}
 }
 
@@ -245,6 +246,64 @@ func TestTwoRoversSpawn(t *testing.T) {
 	s.SelectRover(RoverHauler)
 	if s.R().Type != RoverHauler {
 		t.Fatal("select hauler")
+	}
+}
+
+func TestSwitchBackToSwiftCommandsSwift(t *testing.T) {
+	s := NewGame("MCC-TEST", RoverSwift)
+	s.SelectRover(RoverHauler)
+	s.SelectRover(RoverSwift)
+	if s.R().Type != RoverSwift {
+		t.Fatal("swift should be selected")
+	}
+	from := Axial{Q: s.R().Q, R: s.R().R}
+	var to Axial
+	found := false
+	for _, d := range Neighbors {
+		nb := Axial{Q: from.Q + d.Q, R: from.R + d.R}
+		if h, ok := s.Map[nb.ID()]; ok && !h.Impassable {
+			to, found = nb, true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("need neighbor")
+	}
+	if err := s.GoTo(to.ID()); err != nil {
+		t.Fatal(err)
+	}
+	s.Tick(TickDT)
+	if s.Rovers[0].Type != RoverSwift {
+		t.Fatal("index 0 is swift")
+	}
+	swiftHere := HexID(s.Rovers[0].Q, s.Rovers[0].R)
+	if swiftHere != to.ID() && s.Rovers[0].State != RoverMoving && len(s.Rovers[0].Path) == 0 {
+		t.Fatal("swift must take the goto")
+	}
+	if s.Rovers[1].State == RoverMoving || len(s.Rovers[1].Path) > 0 {
+		t.Fatal("hauler moved after switching back to swift")
+	}
+}
+
+func TestDispatchDoesNotStealSelection(t *testing.T) {
+	s := NewGame("MCC-TEST", RoverHauler)
+	var heavy string
+	for _, c := range s.Contracts {
+		if c.Weight == WeightClassHeavy && c.Status == ContractQueued {
+			heavy = c.ID
+			break
+		}
+	}
+	if heavy == "" {
+		t.Skip("no heavy")
+	}
+	if err := s.Dispatch(heavy); err != nil {
+		t.Fatal(err)
+	}
+	s.SelectRover(RoverSwift)
+	_ = s.Dispatch(heavy)
+	if s.R().Type != RoverSwift {
+		t.Fatal("clicking hauler's job must not silently switch back to hauler")
 	}
 }
 
@@ -304,6 +363,71 @@ func TestContractsHaveRiskAndReward(t *testing.T) {
 	}
 }
 
+func TestDropoffsSitOnFarBase(t *testing.T) {
+	s := NewGame("MCC-TEST", RoverSwift)
+	want := s.farBaseID()
+	for _, c := range s.Contracts {
+		if c.Dropoff != want {
+			t.Fatalf("dropoff %s want far base %s", c.Dropoff, want)
+		}
+		ax, err := ParseHexID(c.Dropoff)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if s.Terminator.InShadow(ax.Q) {
+			t.Fatal("dropoff starts in shadow")
+		}
+	}
+}
+
+func TestShadowedDropoffMovesToLitBase(t *testing.T) {
+	s := NewGame("MCC-TEST", RoverHauler)
+	s.Status = StatusActive
+	var idx int
+	for i := range s.Contracts {
+		if s.Contracts[i].Weight == WeightClassHeavy {
+			idx = i
+			break
+		}
+	}
+	c := &s.Contracts[idx]
+	s.SelectRover(RoverHauler)
+	far, err := ParseHexID(s.farBaseID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.R().Q, s.R().R = far.Q, far.R
+	c.Status = ContractInTransit
+	c.AssignedTo = RoverHauler
+	near := HexID(s.R().Q, s.R().R)
+	if s.Terminator.Direction == DirEast {
+		c.Dropoff = HexID(0, 0)
+		s.Terminator.Pos = 1
+	} else {
+		c.Dropoff = HexID(MapCols-1, 0)
+		s.Terminator.Pos = float64(MapCols) - 2
+	}
+	if !s.Terminator.InShadow(mustQ(c.Dropoff)) {
+		t.Fatal("setup: dropoff should be dark")
+	}
+	s.Tick(TickDT)
+	c = &s.Contracts[idx]
+	if c.Dropoff == near && s.Terminator.InShadow(mustQ(c.Dropoff)) {
+		t.Fatal("dropoff stayed in shadow")
+	}
+	if s.Terminator.InShadow(mustQ(c.Dropoff)) {
+		t.Fatalf("dropoff %s still dark", c.Dropoff)
+	}
+}
+
+func mustQ(id string) int {
+	ax, err := ParseHexID(id)
+	if err != nil {
+		panic(err)
+	}
+	return ax.Q
+}
+
 func TestContinueJobAfterPickup(t *testing.T) {
 	s := NewGame("MCC-TEST", RoverHauler)
 	var c *Contract
@@ -335,5 +459,164 @@ func TestContinueJobAfterPickup(t *testing.T) {
 	}
 	if s.R().Path[len(s.R().Path)-1].ID() != c.Dropoff {
 		t.Fatalf("end=%v drop=%s", s.R().Path[len(s.R().Path)-1], c.Dropoff)
+	}
+}
+
+func TestPickupsDoNotShareHex(t *testing.T) {
+	for _, seed := range []string{"MCC-TEST", "MCC-7F2A", "MCC-AAAA", "MCC-BBBB", "MCC-H6SZ"} {
+		s := NewGame(seed, RoverSwift)
+		seen := map[string]string{}
+		for _, c := range s.Contracts {
+			if prev, ok := seen[c.Pickup]; ok {
+				t.Fatalf("seed %s: pickup %s used by %s and %s", seed, c.Pickup, prev, c.ID)
+			}
+			seen[c.Pickup] = c.ID
+		}
+	}
+}
+
+func TestCannotPathIntoShadow(t *testing.T) {
+	s := NewGame("MCC-TEST", RoverSwift)
+	from := Axial{Q: s.R().Q, R: s.R().R}
+	s.Terminator.Direction = DirEast
+	s.Terminator.Pos = 10
+	var dark Axial
+	foundDark := false
+	for _, h := range s.Map {
+		if h.Axial() == from {
+			continue
+		}
+		if s.Terminator.InShadow(h.Q) {
+			dark = h.Axial()
+			foundDark = true
+			break
+		}
+	}
+	if !foundDark {
+		t.Fatal("need a dark hex")
+	}
+	if path := s.FindPath(from, dark); len(path) != 0 {
+		t.Fatalf("path entered shadow: %v", path)
+	}
+	if err := s.GoTo(dark.ID()); err == nil && s.R().State == RoverMoving {
+		t.Fatal("must not deploy into shadow")
+	}
+}
+
+func TestShadowOvertakeStrands(t *testing.T) {
+	s := NewGame("MCC-TEST", RoverSwift)
+	s.Status = StatusActive
+	s.Terminator.Direction = DirEast
+	s.Terminator.Pos = float64(s.R().Q) + 1
+	if !s.InShadow(s.R().Q, s.R().R) {
+		t.Fatal("rover should be in shadow")
+	}
+	s.Tick(TickDT)
+	if s.R().State != RoverStranded {
+		t.Fatalf("state=%s, shadow must strand", s.R().State)
+	}
+}
+
+func greedyColony(seed string) int {
+	s := NewGame(seed, RoverSwift)
+	s.Status = StatusActive
+	for s.Status == StatusActive {
+		sel := s.Active
+		for i := range s.Rovers {
+			s.Active = i
+			r := s.R()
+			if r.State != RoverIdle {
+				continue
+			}
+			best := -1
+			bestScore := -1
+			for j, c := range s.Contracts {
+				if c.Status != ContractQueued {
+					continue
+				}
+				if reason := s.acceptBlocked(c); reason != "" {
+					continue
+				}
+				if c.ColonyValue > bestScore {
+					bestScore = c.ColonyValue
+					best = j
+				}
+			}
+			if best >= 0 {
+				_ = s.Dispatch(s.Contracts[best].ID)
+			}
+		}
+		s.Active = sel
+		s.Tick(TickDT)
+	}
+	return s.ColonyScore
+}
+
+func TestDeliverableCeilingAllowsWin(t *testing.T) {
+	for i := 0; i < 16; i++ {
+		s := NewGame(fmt.Sprintf("MCC-C%02d", i), RoverSwift)
+		if deliverableCeiling(s) < ColonyWinThreshold {
+			t.Fatalf("seed MCC-C%02d ceiling %d < %d", i, deliverableCeiling(s), ColonyWinThreshold)
+		}
+	}
+}
+
+func TestSolverCanReachColonyWin(t *testing.T) {
+	wins, max := 0, 0
+	n := 12
+	for i := 0; i < n; i++ {
+		score := densityColony(fmt.Sprintf("MCC-S%02d", i))
+		if score > max {
+			max = score
+		}
+		if score >= ColonyWinThreshold {
+			wins++
+		}
+	}
+	t.Logf("density solver wins %d/%d max=%d need=%d", wins, n, max, ColonyWinThreshold)
+	if max < ColonyWinThreshold {
+		t.Fatalf("no seed reached 100 (max=%d) — 100+ must be possible", max)
+	}
+	if wins < 2 {
+		t.Fatalf("solver won %d/%d — 100 should be reachable on more than a fluke", wins, n)
+	}
+}
+
+func TestDeepSearchBeatsThresholdOnASeed(t *testing.T) {
+	best := 0
+	for _, seed := range []string{"MCC-S00", "MCC-S03", "MCC-S07"} {
+		sc := searchColony(seed)
+		if sc > best {
+			best = sc
+		}
+		if sc >= ColonyWinThreshold {
+			t.Logf("%s search colony=%d", seed, sc)
+			return
+		}
+	}
+	t.Fatalf("deep assignment search never reached 100 (best=%d)", best)
+}
+
+func TestGreedyWinRateIsAChallenge(t *testing.T) {
+	wins := 0
+	n := 20
+	sum := 0
+	for i := 0; i < n; i++ {
+		score := greedyColony(fmt.Sprintf("MCC-G%02d", i))
+		sum += score
+		if score >= ColonyWinThreshold {
+			wins++
+		}
+	}
+	avg := float64(sum) / float64(n)
+	t.Logf("greedy wins %d/%d avg colony=%.1f need=%d", wins, n, avg, ColonyWinThreshold)
+	if wins == n {
+		t.Fatalf("greedy won every seed — too easy")
+	}
+	if wins >= n-1 {
+		t.Fatalf("greedy won %d/%d — 100 should still require both rovers and triage", wins, n)
+	}
+	if wins == 0 && avg < float64(ColonyWinThreshold)/4 {
+		t.Fatalf("greedy never scores — too hard (avg=%.1f)", avg)
 	}
 }

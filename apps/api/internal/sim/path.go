@@ -10,7 +10,7 @@ func (s *GameState) FindPath(from, to Axial) []Axial {
 	if _, ok := s.Map[to.ID()]; !ok {
 		return nil
 	}
-	if s.Map[to.ID()].Impassable {
+	if s.Map[to.ID()].Impassable || s.Terminator.InShadow(to.Q) {
 		return nil
 	}
 
@@ -125,6 +125,10 @@ func (s *GameState) GoTo(hexID string) error {
 	to, err := ParseHexID(hexID)
 	if err != nil {
 		return err
+	}
+	if s.InShadow(to.Q, to.R) {
+		s.reject("shadow", "")
+		return errInvalidRoute
 	}
 
 	from := Axial{Q: r.Q, R: r.R}

@@ -98,6 +98,11 @@ func (s *Server) wsGame(c *gin.Context) {
 }
 
 func applyIntent(st *sim.GameState, msg wsIn) error {
+	if msg.Rover == string(sim.RoverHauler) {
+		st.SelectRover(sim.RoverHauler)
+	} else if msg.Rover == string(sim.RoverSwift) {
+		st.SelectRover(sim.RoverSwift)
+	}
 	switch msg.Type {
 	case "accept_contract":
 		return st.Accept(msg.ContractID)

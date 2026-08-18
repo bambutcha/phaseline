@@ -21,15 +21,21 @@ type cargoSpec struct {
 }
 
 var cargoPool = []cargoSpec{
-	{CargoO2, "O₂-фильтры — Hab Block C", WeightClassMedium, 40, 10, 0},
-	{CargoO2, "Скрубберы CO₂ — шлюз 2", WeightClassMedium, 35, 8, 0},
-	{CargoCryo, "Криопробы — кратер Шиккард", WeightClassLight, 25, 30, 0},
-	{CargoCrew, "Капсула экипажа — смена «Рассвет»", WeightClassMedium, 50, 5, 0},
-	{CargoReactor, "Стержень реактора — ядро Alpha", WeightClassHeavy, 20, 35, 0},
-	{CargoHelium3, "Helium-3 — контракт Земли", WeightClassHeavy, 5, 50, 0},
-	{CargoMedSeeds, "Медсемена — оранжерея", WeightClassLight, 30, 15, 90},
-	{CargoCommRelay, "Реле связи — пик хребта", WeightClassLight, 20, 20, 0},
+	{CargoO2, "O₂-фильтры — Hab Block C", WeightClassMedium, 22, 8, 0},
+	{CargoO2, "Скрубберы CO₂ — шлюз 2", WeightClassMedium, 20, 6, 0},
+	{CargoO2, "Вода — льды Шеклтона", WeightClassMedium, 18, 9, 0},
+	{CargoCryo, "Криопробы — кратер Шиккард", WeightClassLight, 10, 28, 0},
+	{CargoCrew, "Капсула экипажа — смена «Рассвет»", WeightClassMedium, 28, 4, 0},
+	{CargoCrew, "Медик — отсек B", WeightClassMedium, 24, 5, 0},
+	{CargoReactor, "Стержень реактора — ядро Alpha", WeightClassHeavy, 16, 30, 0},
+	{CargoReactor, "Топливные стержни — южный реактор", WeightClassHeavy, 14, 24, 0},
+	{CargoHelium3, "Helium-3 — контракт Земли", WeightClassHeavy, 14, 32, 0},
+	{CargoMedSeeds, "Медсемена — оранжерея", WeightClassLight, 16, 10, 0},
+	{CargoCommRelay, "Реле связи — пик хребта", WeightClassLight, 14, 12, 0},
+	{CargoCommRelay, "Маяк — южный гребень", WeightClassLight, 12, 14, 0},
 }
+
+var layoutNames = []string{"mixed", "solar_belt", "ridge_wall", "crater_field", "dust_sea", "cold_front"}
 
 var crisisKinds = []string{
 	"dust_storm", "solar_flare", "cave_in", "vip_override", "comm_blackout",
@@ -91,15 +97,8 @@ func NewGame(seed string, rover RoverType) *GameState {
 		dir = DirWest
 	}
 
-	hexes := make(map[string]Hex, MapHexCount)
-	var ids []string
-	for r := 0; r < MapRows; r++ {
-		for q := 0; q < MapCols; q++ {
-			h := Hex{Q: q, R: r, Type: rollTerrain(rng)}
-			hexes[h.ID()] = h
-			ids = append(ids, h.ID())
-		}
-	}
+	layout := layoutNames[rng.Intn(len(layoutNames))]
+	hexes, ids := paintMap(rng, layout)
 
 	westBase := Hex{Q: 0, R: MapRows / 2, Type: TypeBase}
 	eastBase := Hex{Q: MapCols - 1, R: MapRows / 2, Type: TypeBase}
@@ -110,8 +109,18 @@ func NewGame(seed string, rover RoverType) *GameState {
 	if dir == DirWest {
 		start = eastBase.Axial()
 	}
+	hq, hr := start.Q, start.R
+	if start.R+1 < MapRows {
+		hr = start.R + 1
+	} else if start.R > 0 {
+		hr = start.R - 1
+	}
 
-	term := Terminator{Speed: TerminatorSpeed, Direction: dir}
+	span := float64(MapCols)
+	term := Terminator{
+		Speed:     span / (GameDurationTargetSec * 0.64) * (0.92 + rng.Float64()*0.16),
+		Direction: dir,
+	}
 	if dir == DirWest {
 		term.Pos = float64(MapCols) - 0.5
 	} else {
@@ -119,11 +128,11 @@ func NewGame(seed string, rover RoverType) *GameState {
 	}
 
 	crisis := crisisKinds[rng.Intn(len(crisisKinds))]
-	jitter := rng.Float64()*14 - 7
-	crisisAt := 0.35*GameDurationTargetSec + jitter
+	jitter := rng.Float64()*20 - 10
+	crisisAt := 0.28*GameDurationTargetSec + jitter
 
 	swift := NewRover(RoverSwift, start.Q, start.R)
-	hauler := NewRover(RoverHauler, start.Q, start.R)
+	hauler := NewRover(RoverHauler, hq, hr)
 	active := 0
 	if rover == RoverHauler {
 		active = 1
@@ -131,6 +140,7 @@ func NewGame(seed string, rover RoverType) *GameState {
 
 	g := &GameState{
 		Seed:         seed,
+		Layout:       layout,
 		Status:       StatusLobby,
 		Map:          hexes,
 		Terminator:   term,
@@ -142,7 +152,50 @@ func NewGame(seed string, rover RoverType) *GameState {
 		FreeReroutes: RerouteFreeCount,
 	}
 	g.Contracts = g.rollContracts(rng, westBase.ID(), eastBase.ID(), ids)
+	g.boostDeliverableCeiling()
 	return g
+}
+
+func paintMap(rng *rand.Rand, layout string) (map[string]Hex, []string) {
+	hexes := make(map[string]Hex, MapHexCount)
+	ids := make([]string, 0, MapHexCount)
+	for r := 0; r < MapRows; r++ {
+		for q := 0; q < MapCols; q++ {
+			h := Hex{Q: q, R: r, Type: terrainFor(rng, layout, q, r)}
+			hexes[h.ID()] = h
+			ids = append(ids, h.ID())
+		}
+	}
+	return hexes, ids
+}
+
+func terrainFor(rng *rand.Rand, layout string, q, r int) HexType {
+	switch layout {
+	case "solar_belt":
+		if r == MapRows/2 || r == MapRows/2-1 {
+			return TypeSolarPlateau
+		}
+	case "ridge_wall":
+		if q == MapCols/2 {
+			return TypeRidge
+		}
+	case "crater_field":
+		if rng.Float64() < 0.38 {
+			return TypeCrater
+		}
+	case "dust_sea":
+		if rng.Float64() < 0.42 {
+			return TypeDustField
+		}
+		if rng.Float64() < 0.28 {
+			return TypeColdSink
+		}
+	case "cold_front":
+		if r >= MapRows-2 {
+			return TypeColdSink
+		}
+	}
+	return rollTerrain(rng)
 }
 
 func rollTerrain(rng *rand.Rand) HexType {
@@ -165,43 +218,25 @@ func rollTerrain(rng *rand.Rand) HexType {
 
 func (s *GameState) rollContracts(rng *rand.Rand, westBase, eastBase string, ids []string) []Contract {
 	order := rng.Perm(len(cargoPool))
-	out := make([]Contract, 0, ContractsPerGame)
-	for i := 0; i < ContractsPerGame && i < len(order); i++ {
+	used := map[string]bool{westBase: true, eastBase: true}
+	n := 5 + rng.Intn(3)
+	if n > len(order) {
+		n = len(order)
+	}
+	out := make([]Contract, 0, n)
+	for i := 0; i < n; i++ {
 		spec := cargoPool[order[i]]
-		pick := ids[rng.Intn(len(ids))]
-		drop := eastBase
-		if s.Terminator.Direction == DirWest {
-			drop = westBase
-		}
-		if rng.Float64() < 0.35 {
-			drop = ids[rng.Intn(len(ids))]
-		}
-		if pick == drop {
-			drop = eastBase
-			if pick == drop {
-				drop = westBase
-			}
-		}
-		impossible := false
-		if i == ContractsPerGame-1 {
-			spec = cargoPool[5] // Helium-3, heavy, Earth-heavy — typically not completable in time
-			pick = s.farthestHex(ids)
-			if s.Terminator.Direction == DirWest {
-				drop = eastBase
-			} else {
-				drop = westBase
-			}
-			impossible = true
-			spec.title = "Helium-3 — почти нереально успеть"
-		}
+		pick := s.pickUniqueHex(rng, ids, used, false)
+		used[pick] = true
+		drop := s.farBaseID()
 		ph := s.Map[pick]
 		risk := hexRisk(ph)
 		urgency := "low"
 		deadline := 0.0
 		if spec.cargo == CargoMedSeeds {
-			deadline = 50 + rng.Float64()*25
+			deadline = 70 + rng.Float64()*28
 			urgency = "high"
-		} else if risk == "high" || impossible {
+		} else if risk == "high" {
 			urgency = "high"
 		} else if spec.weight == WeightClassHeavy {
 			urgency = "medium"
@@ -220,26 +255,73 @@ func (s *GameState) rollContracts(rng *rand.Rand, westBase, eastBase string, ids
 			Urgency:     urgency,
 			Deadline:    deadline,
 			Status:      ContractQueued,
-			Impossible:  impossible,
 		})
 	}
 	return out
 }
 
-func (s *GameState) farthestHex(ids []string) string {
-	from := Axial{Q: s.Rovers[0].Q, R: s.Rovers[0].R}
-	best := ids[0]
-	bestD := -1
-	for _, id := range ids {
-		ax, err := ParseHexID(id)
-		if err != nil {
-			continue
+func (s *GameState) boostDeliverableCeiling() {
+	sum := 0
+	idx := make([]int, 0, len(s.Contracts))
+	for i, c := range s.Contracts {
+		sum += c.ColonyValue
+		idx = append(idx, i)
+	}
+	need := ColonyWinThreshold
+	for sum < need && len(idx) > 0 {
+		grew := false
+		for _, i := range idx {
+			if sum >= need {
+				break
+			}
+			s.Contracts[i].ColonyValue += 2
+			s.Contracts[i].Reward = s.Contracts[i].ColonyValue + s.Contracts[i].EarthValue
+			sum += 2
+			grew = true
 		}
-		d := CubeDistance(from, ax)
-		if d > bestD {
-			bestD = d
-			best = id
+		if !grew {
+			break
 		}
 	}
-	return best
+}
+
+func (s *GameState) pickUniqueHex(rng *rand.Rand, ids []string, used map[string]bool, farthest bool) string {
+	from := Axial{Q: s.Rovers[0].Q, R: s.Rovers[0].R}
+	best := ""
+	bestD := -1
+	perm := rng.Perm(len(ids))
+	fallback := ""
+	for _, i := range perm {
+		id := ids[i]
+		if used[id] {
+			continue
+		}
+		h := s.Map[id]
+		if fallback == "" {
+			fallback = id
+		}
+		if h.Type == TypeBase {
+			continue
+		}
+		if farthest {
+			ax, err := ParseHexID(id)
+			if err != nil {
+				continue
+			}
+			d := CubeDistance(from, ax)
+			if d > bestD {
+				bestD = d
+				best = id
+			}
+			continue
+		}
+		return id
+	}
+	if farthest && best != "" {
+		return best
+	}
+	if fallback != "" {
+		return fallback
+	}
+	return ids[0]
 }
