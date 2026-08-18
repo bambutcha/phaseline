@@ -2,65 +2,68 @@
 
 **Deliver before the line.**
 
-Браузерная стратегия про лунную доставку: линия фазы ползёт по гекс-карте, спасти все контракты нельзя. Стек и правила зафиксированы — это репозиторий тестового задания Fullstack (Moon Courier Crisis) с авторской задумкой.
+PHASELINE — готовая браузерная игра для тестового задания Moon Courier Crisis. На лунной гекс-карте ползёт терминатор фазы: все контракты спасти нельзя. Нужно набрать **100 очков колонии** прежде, чем тень поглотит карту (примерно за 180 секунд).
 
-Игра ещё не реализована. Здесь лежат GDD, контракты API, схема БД и каркас, с которого начинать код.
+В распоряжении два ровера:
 
-## Документы (читать в этом порядке)
+- **Swift** — быстрый, но не перевозит тяжёлый груз;
+- **Hauler** — медленнее, зато берёт тяжёлые заказы.
 
-1. [docs/GDD.md](docs/GDD.md) — дизайн игры, скоуп v1
-2. [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — фазы 0–8, с чего писать код
-3. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — сервер, WS, пакеты
-4. [docs/SIM.md](docs/SIM.md) — формулы тика
-5. [docs/HEX.md](docs/HEX.md) — axial / cube / A*
-6. [docs/API.md](docs/API.md) — REST + WebSocket
-7. [docs/COPY.md](docs/COPY.md) — туториал и вердикты Black Box
+## Что реализовано
 
-## Стек
+1. Лунная гекс-карта и терминатор фазы.
+2. Нумерованные пины заказов на карте.
+3. Заказы с весом, наградой, срочностью и риском.
+4. Роверы с батареей, грузовыми слотами и текущим статусом.
+5. Выбор ровера и заказа, запуск доставки.
+6. Хранение в Postgres: `games`, `contracts`, `game_events`, `ghost_runs`.
 
-| Слой | |
-|---|---|
-| Backend | Go, Gin, pgx, sqlc, goose, WebSocket |
-| Frontend | Next.js (пока заглушка), React, TypeScript, Tailwind, Zustand, Canvas 2D |
-| DB | PostgreSQL 16 |
-| DevOps | Docker Compose, Caddy |
+Логика игры учитывает вес груза: тяжёлый заказ замедляет ровер и недоступен Swift. Проверяются батарея и вместимость, а зоны карты — crater, ridge и cold_sink — отличаются стоимостью маршрута. Невыполнимые маршруты отклоняются, доставка обновляет счёт колонии.
 
-Нет Redis, Kafka, MinIO, GORM.
-
-## Запуск каркаса
+## Запуск
 
 ```bash
-cp .env.example .env
 docker compose up --build
 ```
 
-- UI-заглушка: http://localhost/
-- Health: http://localhost/health
+- Игра: http://localhost/
+- Healthcheck: http://localhost/health
+- Отладочный API: `:8080`
 
-Симуляция без UI:
+Postgres не опубликован на хосте через `5432`: база доступна только внутри Compose-сети.
+
+Тесты:
 
 ```bash
-cd apps/api && go test ./internal/sim/...
+cd apps/api && go test ./...
 ```
+
+## Как играть
+
+При первом визите откроется туториал. Выберите Swift или Hauler, затем нажмите на пронумерованный заказ — ровер отправится в путь.
+
+Во время движения можно выбрать другую клетку: ровер завершит текущее ребро, после чего построит путь к новой цели без «отката» назад. Тяжёлый заказ для Swift будет отклонён. Красный маршрут означает, что батареи не хватит.
+
+## Стек
+
+- Go, Gin, pgx, sqlc, goose, WebSocket
+- PostgreSQL 16
+- статический Canvas 2D в nginx (Next.js в v1 не используется)
+- Caddy, Docker Compose
+
+Без Redis, Kafka, MinIO и GORM.
 
 ## Структура
 
+```text
+apps/api                 Go API и server-authoritative симуляция
+apps/web/public/index.html  статический Canvas-клиент
+deploy/Caddyfile         reverse proxy
+docs/                    GDD, архитектура и спецификации
 ```
-apps/api     Go API + internal/sim
-apps/web     заглушка → позже Next.js
-deploy/      Caddyfile
-docs/        GDD и контракты
-screenshots/ для сдачи
-```
 
-## Сдача (когда игра будет готова)
+## Использование AI
 
-- Ссылка на git
-- Скриншоты: mobile, desktop, тень, Black Box
-- README: запуск, что сделано, логика, где данные, **что сделано с AI**
-
-Шаблон секций для финального README — в конце GDD / DEVELOPMENT.
-
-## Принцип разработки
-
-Сначала `sim/` и тесты, потом REST, потом WebSocket, потом Canvas. Не наоборот.
+- **Сгенерировано:** boilerplate Compose и Caddy, значительная часть Canvas UI (HTML/CSS/JS), Go-код, сгенерированный sqlc, текст туториала из `docs/COPY.md`.
+- **Спроектировано и тщательно специфицировано вручную:** формулы тика в `internal/sim` (`MoveCost`, батарея, терминатор в axial-координатах), детерминизм seed, правила груза, распределение задач между двумя роверами, reroute без отката, тесты.
+- **Проверено:** `go test ./...` и playtest через `docker compose`.

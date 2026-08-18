@@ -7,394 +7,541 @@
     <style>
       :root {
         color-scheme: dark;
-        --bg: #0b0f14;
-        --gold: #c9a227;
-        --cold: #2e86ab;
-        --fg: #e8e8e8;
+        --bg: #070b10; --panel: #121920; --gold: #d4b44a; --cold: #5aa6d4;
+        --fg: #eef1f4; --muted: #8b96a1; --danger: #e06868; --ok: #6ecf8a;
       }
       * { box-sizing: border-box; }
-      html, body {
-        margin: 0;
-        height: 100%;
-        font-family: ui-sans-serif, system-ui, sans-serif;
-        background: var(--bg);
-        color: var(--fg);
-      }
-      header {
-        display: flex;
-        justify-content: space-between;
-        gap: 8px;
-        padding: 10px 12px;
-        font-size: 13px;
-        letter-spacing: 0.04em;
-      }
-      header strong { color: var(--gold); }
-      #map {
-        width: 100%;
-        height: 58vh;
-        min-height: 280px;
-        display: block;
-        touch-action: manipulation;
-        background: radial-gradient(ellipse 120% 80% at 50% 0%, #1a2430 0%, #0b0f14 70%);
-      }
-      .contracts {
-        display: flex;
-        gap: 8px;
-        overflow-x: auto;
-        padding: 8px 12px;
-        -webkit-overflow-scrolling: touch;
-      }
-      .card {
-        min-width: 160px;
-        padding: 8px 10px;
-        border: 1px solid #2a333c;
-        border-radius: 10px;
-        background: #12181f;
-        font-size: 12px;
-        cursor: pointer;
-      }
-      .card.active { border-color: var(--gold); box-shadow: 0 0 12px rgba(201, 162, 39, 0.25); }
-      .bar {
-        display: flex;
-        gap: 8px;
-        padding: 10px 12px calc(12px + env(safe-area-inset-bottom));
-      }
-      button {
-        flex: 1;
-        min-height: 44px;
-        border: 0;
-        border-radius: 10px;
-        background: var(--gold);
-        color: #111;
-        font-weight: 700;
-        letter-spacing: 0.08em;
-        cursor: pointer;
-      }
-      button.ghost {
-        background: #1c242d;
-        color: var(--fg);
-      }
-      #log {
-        height: 56px;
-        overflow: auto;
-        padding: 0 12px 6px;
-        font-size: 11px;
-        color: #9aa3ab;
-      }
+      html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font-family: ui-sans-serif, system-ui, sans-serif; }
+      body { display: flex; flex-direction: column; min-height: 100%; }
+      header { padding: 10px 14px 6px; display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: center; }
+      .brand strong { color: var(--gold); letter-spacing: 0.12em; }
+      #seed { color: var(--muted); margin-left: 8px; font-size: 12px; }
+      .rovers { display: flex; gap: 8px; }
+      .rbtn { border: 1px solid #2a333c; background: #161d26; color: var(--fg); border-radius: 10px; min-height: 40px; padding: 6px 10px; font-size: 12px; letter-spacing: 0; font-weight: 700; flex: 0 0 auto; min-width: 120px; }
+      .rbtn.on { border-color: var(--gold); box-shadow: 0 0 12px rgba(212,180,74,0.25); }
+      .rbtn small { display: block; font-weight: 500; color: var(--muted); }
+      .goal { margin: 0 14px 6px; }
+      .goal-row { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+      .goal-bar { height: 8px; background: #1c242d; border-radius: 99px; overflow: hidden; display: flex; }
+      .goal-bar i { display: block; height: 100%; background: var(--cold); width: 0; }
+      .goal-bar em { display: block; height: 100%; background: #3a4550; width: 0; }
+      #hint { margin: 0 14px 8px; padding: 10px 12px; border-radius: 10px; background: #161d26; border: 1px solid #2a333c; font-size: 14px; line-height: 1.4; }
+      #hint.warn { border-color: var(--danger); background: rgba(224,104,104,0.12); color: #ffd0d0; }
+      #hint.ok { border-color: var(--ok); }
+      #map { width: 100%; flex: 1; min-height: 280px; display: block; touch-action: manipulation; background: radial-gradient(ellipse 90% 70% at 50% 0%, #1a2430 0%, var(--bg) 62%); }
+      .hud2 { display: flex; gap: 12px; padding: 6px 14px 0; font-size: 12px; color: var(--muted); flex-wrap: wrap; align-items: center; }
+      .bat { flex: 1; min-width: 140px; }
+      .bat i { display: block; height: 8px; border-radius: 99px; background: linear-gradient(90deg, var(--danger), var(--gold), var(--ok)); transform-origin: left; }
+      .contracts { display: flex; gap: 8px; overflow-x: auto; padding: 8px 14px; }
+      .card { min-width: 210px; padding: 10px 12px; border: 1px solid #2a333c; border-radius: 12px; background: var(--panel); cursor: pointer; }
+      .card.active { border-color: var(--gold); }
+      .card.blocked { border-color: var(--danger); }
+      .card.done { opacity: 0.45; }
+      .card h3 { margin: 0 0 6px; font-size: 13px; }
+      .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 8px; font-size: 12px; color: var(--muted); }
+      .stats b { color: var(--fg); }
+      .num { display: inline-flex; width: 20px; height: 20px; border-radius: 50%; background: var(--gold); color: #111; font-size: 11px; font-weight: 800; align-items: center; justify-content: center; margin-right: 6px; }
+      .bar { display: flex; gap: 8px; padding: 10px 14px calc(12px + env(safe-area-inset-bottom)); }
+      button { flex: 1; min-height: 44px; border: 0; border-radius: 12px; background: var(--gold); color: #111; font-weight: 800; letter-spacing: 0.06em; cursor: pointer; }
+      button.ghost { background: #1c242d; color: var(--fg); }
+      button:disabled { opacity: 0.4; }
+      #tutorial, #modal { display: none; position: fixed; inset: 0; z-index: 30; background: rgba(5,8,12,0.92); align-items: center; justify-content: center; padding: 18px; }
+      #tutorial.open, #modal.open { display: flex; }
+      .box { max-width: 460px; width: 100%; background: var(--panel); border: 1px solid #2a333c; border-radius: 16px; padding: 22px; }
+      .box h2 { margin: 0 0 8px; color: var(--gold); }
+      .box p { color: #c9d2da; line-height: 1.45; margin: 0 0 12px; }
+      .actions { display: flex; gap: 8px; }
+      .dots { display: flex; gap: 6px; margin-bottom: 12px; }
+      .dots i { width: 8px; height: 8px; border-radius: 50%; background: #2a333c; }
+      .dots i.on { background: var(--gold); }
+      .floater { position: absolute; pointer-events: none; font-weight: 800; color: var(--ok); animation: up 1.2s ease-out forwards; }
+      @keyframes up { to { transform: translateY(-48px); opacity: 0; } }
     </style>
   </head>
   <body>
     <header>
-      <div><strong>PHASELINE</strong> <span id="seed"></span></div>
-      <div>T <span id="t">0</span>s · ⚡ <span id="bat">100</span>% · тень <span id="eta">—</span>s</div>
+      <div class="brand"><strong>PHASELINE</strong><span id="seed"></span></div>
+      <div class="rovers">
+        <button class="rbtn on" id="btnSwift" type="button">Swift<small id="swStats">100% · свободно</small></button>
+        <button class="rbtn" id="btnHauler" type="button">Hauler<small id="haStats">140% · свободно</small></button>
+      </div>
     </header>
+    <div class="goal">
+      <div class="goal-row">
+        <span>Колония <b id="colony">0</b> / 100 · Земля <b id="earth">0</b></span>
+        <span>Смена <b id="left">180</b> с</span>
+      </div>
+      <div class="goal-bar"><i id="goalFill"></i></div>
+    </div>
+    <div id="hint">Открой обучение или выбери заказ — оба ровера уже на базе.</div>
     <canvas id="map"></canvas>
+    <div class="hud2">
+      <div class="bat"><i id="batFill"></i><div>Батарея выбранного <span id="bat">100</span>% · слоты <span id="slots">0/2</span></div></div>
+      <div>Тень на ровере через <span id="eta">—</span> с</div>
+    </div>
     <div class="contracts" id="contracts"></div>
-    <div id="log"></div>
     <div class="bar">
+      <button class="ghost" id="help">ОБУЧЕНИЕ</button>
       <button class="ghost" id="new">НОВАЯ</button>
       <button class="ghost" id="auto">АВТО</button>
-      <button id="deploy">ПУСК</button>
+    </div>
+    <div id="tutorial">
+      <div class="box">
+        <div class="dots"><i id="d0" class="on"></i><i id="d1"></i><i id="d2"></i><i id="d3"></i></div>
+        <h2 id="tutTitle"></h2>
+        <p id="tutText"></p>
+        <div class="actions">
+          <button class="ghost" id="tutSkip">ПРОПУСТИТЬ</button>
+          <button id="tutNext">ДАЛЬШЕ</button>
+        </div>
+      </div>
+    </div>
+    <div id="modal">
+      <div class="box">
+        <h2 id="modalTitle">Black Box</h2>
+        <p id="modalText"></p>
+        <p id="modalMeta" style="color:#8b96a1;font-size:13px"></p>
+        <div class="actions">
+          <button class="ghost" id="share">ПОДЕЛИТЬСЯ</button>
+          <button id="closeModal">ЕЩЁ РАЗ</button>
+        </div>
+      </div>
     </div>
     <script>
       const canvas = document.getElementById("map");
       const ctx = canvas.getContext("2d");
-      let game = null;
-      let ws = null;
-      let gameId = null;
-      let wsIntentionalClose = false;
-      let view = { ox: 0, oy: 0, size: 40 };
+      let game = null, ws = null, gameId = null, shareUrl = "";
+      let wsIntentionalClose = false, reconnectTimer = null;
+      let hoverHex = null, view = { ox: 0, oy: 0, size: 40 };
+      let selectedId = null, tutStep = 0, floaters = [];
+      let audioCtx = null;
 
       const colors = {
-        base: "#c9a227",
-        regolith: "#7a8088",
-        solar_plateau: "#d4b44a",
-        crater: "#3a2f2a",
-        ridge: "#6d6360",
-        dust_field: "#a09070",
-        cold_sink: "#2e86ab",
+        base: "#c9a227", regolith: "#7a8088", solar_plateau: "#d4b44a",
+        crater: "#3a2f2a", ridge: "#6d6360", dust_field: "#a09070", cold_sink: "#2e86ab",
       };
+      const terrainRu = {
+        base: "база · зарядка", regolith: "реголит", solar_plateau: "солнце · заряд",
+        crater: "кратер · риск", ridge: "хребет · медленно", dust_field: "пыль", cold_sink: "холод",
+      };
+      const statusRu = {
+        queued: "доступен", accepted: "принят", in_transit: "в кузове",
+        delivered: "сдан", failed: "срыв", expired: "срок", lost_to_shadow: "тень",
+      };
+      const weightRu = { light: "лёгкий", medium: "средний", heavy: "тяжёлый" };
+      const riskRu = { low: "низкий", medium: "средний", high: "высокий" };
+      const urgRu = { low: "нет", medium: "средняя", high: "горит" };
+      const rejectRu = {
+        swift_no_heavy: "Swift не берёт тяжёлое. Переключись на Hauler.",
+        slots_full: "У этого ровера оба слота заняты. Сдай груз.",
+        battery: "Батареи не хватит. Сократи путь или зарядись на базе/солнце.",
+        no_path: "Пути нет.",
+        stranded: "Этот ровер сел. Возьми второго.",
+      };
+      const outcomeTitle = { colony_saved: "Колония спасена", pyrrhic: "Пиррова победа", signal_lost: "Сигнал потерян" };
+      const slides = [
+        { title: "Линия наступает.", text: "Золотая полоса — терминатор. Клетки справа (или слева) уходят в тень: батарея садится быстрее, заказы сгорают. Это враг, не таймер в углу." },
+        { title: "Два ровера. Всех не спасти.", text: "Swift быстрый, но не везёт тяжёлое. Hauler медленнее и тащит стержни и гелий-3. У каждого 2 слота. Восемь заказов — выбери, кого спасать." },
+        { title: "Клик — едет. Новый клик не сбрасывает.", text: "Нажми номер на карте или карточку. Ровер стартует сам. Если кликнуть другую клетку на ходу, он доедет текущую и только потом свернёт. На базе батарея растёт." },
+        { title: "Цель смены.", text: "Набери 100 очков колонии, пока тень не сожрёт карту. Земля тоже считает прибыль. Красный путь = доставка невозможна. Понял — играй." },
+      ];
 
-      function hexToPixel(q, r, size) {
-        return {
-          x: size * (Math.sqrt(3) * q + Math.sqrt(3) / 2 * r),
-          y: size * (1.5 * r),
-        };
+      function beep(freq, dur) {
+        try {
+          audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+          const o = audioCtx.createOscillator();
+          const g = audioCtx.createGain();
+          o.frequency.value = freq; o.type = "square";
+          g.gain.value = 0.04;
+          o.connect(g); g.connect(audioCtx.destination);
+          o.start(); o.stop(audioCtx.currentTime + (dur || 0.08));
+        } catch {}
       }
-
+      function hexToPixel(q, r, size) {
+        return { x: size * (Math.sqrt(3) * q + Math.sqrt(3) / 2 * r), y: size * (1.5 * r) };
+      }
+      function parseHexId(id) {
+        const [q, r] = String(id).split(",").map(Number);
+        return { q, r };
+      }
+      function rovers() { return game?.rovers?.length ? game.rovers : (game?.rover ? [game.rover] : []); }
+      function activeRover() {
+        const list = rovers();
+        return list.find((r) => r.type === game.activeRover) || list[0] || game.rover;
+      }
       function computeView(g) {
-        const w = canvas.clientWidth;
-        const h = canvas.clientHeight;
+        const w = canvas.clientWidth, h = canvas.clientHeight;
         let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
         for (const hex of g.map.hexes) {
           const p = hexToPixel(hex.q, hex.r, 1);
-          minX = Math.min(minX, p.x);
-          maxX = Math.max(maxX, p.x);
-          minY = Math.min(minY, p.y);
-          maxY = Math.max(maxY, p.y);
+          minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+          minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
         }
-        const pad = 1.8;
-        const bw = (maxX - minX + pad * 2) || 1;
-        const bh = (maxY - minY + pad * 2) || 1;
-        const size = Math.min((w * 0.88) / bw, (h * 0.88) / bh) * 0.95;
-        const cx = (minX + maxX) / 2;
-        const cy = (minY + maxY) / 2;
-        return {
-          size: Math.max(size, 28),
-          ox: w / 2 - cx * size,
-          oy: h / 2 - cy * size,
-        };
+        const pad = 2.4;
+        const bw = (maxX - minX + pad * 2) || 1, bh = (maxY - minY + pad * 2) || 1;
+        const size = Math.min((w * 0.92) / bw, (h * 0.88) / bh);
+        const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+        return { size: Math.max(size, 22), ox: w / 2 - cx * size, oy: h / 2 - cy * size };
       }
-
       function world(hex) {
         const p = hexToPixel(hex.q, hex.r, view.size);
         return { x: view.ox + p.x, y: view.oy + p.y };
       }
-
+      function roverPixel(r, offset) {
+        const cur = world({ q: r.q, r: r.r });
+        let p = cur;
+        if (r.path?.length && r.progress > 0) {
+          const nxt = world(parseHexId(r.path[0]));
+          p = { x: cur.x + (nxt.x - cur.x) * r.progress, y: cur.y + (nxt.y - cur.y) * r.progress };
+        }
+        return { x: p.x + (offset || 0), y: p.y };
+      }
       function resize() {
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
-        canvas.width = canvas.clientWidth * dpr;
-        canvas.height = canvas.clientHeight * dpr;
+        canvas.width = canvas.clientWidth * dpr; canvas.height = canvas.clientHeight * dpr;
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         if (game) view = computeView(game);
         draw();
       }
-
       function drawHex(x, y, fill, stroke, glow) {
         ctx.beginPath();
         for (let i = 0; i < 6; i++) {
           const a = Math.PI / 180 * (60 * i - 30);
-          const px = x + view.size * Math.cos(a);
-          const py = y + view.size * Math.sin(a);
+          const px = x + view.size * Math.cos(a), py = y + view.size * Math.sin(a);
           i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
         }
         ctx.closePath();
-        if (glow) {
-          ctx.shadowColor = glow;
-          ctx.shadowBlur = 14;
-        }
-        ctx.fillStyle = fill;
-        ctx.fill();
-        ctx.shadowBlur = 0;
-        ctx.strokeStyle = stroke || "#1c242d";
-        ctx.lineWidth = 2;
-        ctx.stroke();
+        if (glow) { ctx.shadowColor = glow; ctx.shadowBlur = 14; }
+        ctx.fillStyle = fill; ctx.fill(); ctx.shadowBlur = 0;
+        ctx.strokeStyle = stroke || "#1c242d"; ctx.lineWidth = 2; ctx.stroke();
       }
-
-      function drawEarth(w, h) {
-        const ex = w - 36, ey = 28, er = 14;
-        const g = ctx.createRadialGradient(ex - 4, ey - 4, 2, ex, ey, er);
-        g.addColorStop(0, "#6eb5ff");
-        g.addColorStop(0.6, "#2e86ab");
-        g.addColorStop(1, "#0b0f14");
-        ctx.beginPath();
-        ctx.arc(ex, ey, er, 0, Math.PI * 2);
-        ctx.fillStyle = g;
-        ctx.fill();
-        ctx.globalAlpha = 0.35;
-        ctx.fillStyle = "#fff";
-        ctx.font = "10px sans-serif";
-        ctx.fillText("EARTH", ex - 22, ey + 28);
-        ctx.globalAlpha = 1;
-      }
-
       function terminatorX(g) {
-        const dir = g.map.terminator.direction;
-        const pos = g.map.terminator.pos;
-        const hexes = g.map.hexes;
         let minPx = Infinity, maxPx = -Infinity;
-        for (const hex of hexes) {
+        for (const hex of g.map.hexes) {
           const p = hexToPixel(hex.q, hex.r, view.size);
-          minPx = Math.min(minPx, p.x);
-          maxPx = Math.max(maxPx, p.x);
+          minPx = Math.min(minPx, p.x); maxPx = Math.max(maxPx, p.x);
         }
-        const span = maxPx - minPx + view.size * 4;
-        if (dir === "west") {
-          return view.ox + maxPx - (pos + 0.5) * view.size * 0.85;
-        }
-        return view.ox + minPx + (pos + 0.5) * view.size * 0.85;
+        const pos = g.map.terminator.pos;
+        if (g.map.terminator.direction === "west") return view.ox + maxPx - (pos + 0.5) * view.size * 0.7;
+        return view.ox + minPx + (pos + 0.5) * view.size * 0.7;
       }
-
       function drawShadowBand(g, w, h) {
         const tx = terminatorX(g);
-        const grad = ctx.createLinearGradient(tx - 80, 0, tx + 40, 0);
+        const grad = ctx.createLinearGradient(tx - 100, 0, tx + 40, 0);
         grad.addColorStop(0, "rgba(11,15,20,0)");
-        grad.addColorStop(0.35, "rgba(46,134,171,0.12)");
-        grad.addColorStop(0.55, "rgba(11,15,20,0.55)");
-        grad.addColorStop(1, "rgba(5,8,12,0.92)");
+        grad.addColorStop(0.5, "rgba(46,134,171,0.18)");
+        grad.addColorStop(1, "rgba(5,8,12,0.9)");
         ctx.fillStyle = grad;
-        if (g.map.terminator.direction === "west") {
-          ctx.fillRect(0, 0, tx + 20, h);
-        } else {
-          ctx.fillRect(tx - 20, 0, w - tx + 20, h);
-        }
-        ctx.strokeStyle = "rgba(201,162,39,0.55)";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(tx, 0);
-        ctx.lineTo(tx, h);
-        ctx.stroke();
-        ctx.strokeStyle = "rgba(201,162,39,0.2)";
-        ctx.lineWidth = 6;
-        ctx.stroke();
+        if (g.map.terminator.direction === "west") ctx.fillRect(0, 0, tx + 24, h);
+        else ctx.fillRect(tx - 24, 0, w - tx + 24, h);
+        ctx.strokeStyle = "rgba(212,180,74,0.8)"; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(tx, 0); ctx.lineTo(tx, h); ctx.stroke();
       }
-
-      function drawStars(w, h, tx, west) {
-        ctx.fillStyle = "rgba(255,255,255,0.35)";
-        for (let i = 0; i < 40; i++) {
-          const sx = (i * 97) % w;
-          const sy = (i * 53) % h;
-          if ((!west && sx > tx) || (west && sx < tx)) {
-            ctx.fillRect(sx, sy, 1.2, 1.2);
-          }
-        }
+      function drawPolyline(points, color, width, dash) {
+        if (points.length < 2) return;
+        ctx.beginPath(); ctx.setLineDash(dash || []);
+        ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+        ctx.strokeStyle = color; ctx.lineWidth = width; ctx.stroke(); ctx.setLineDash([]);
       }
-
-      function roverPixel(g) {
-        const cur = world({ q: g.rover.q, r: g.rover.r });
-        if (g.rover.path && g.rover.path.length && g.rover.progress > 0) {
-          const [q, r] = g.rover.path[0].split(",").map(Number);
-          const nxt = world({ q, r });
-          const p = g.rover.progress;
-          return { x: cur.x + (nxt.x - cur.x) * p, y: cur.y + (nxt.y - cur.y) * p };
-        }
-        return cur;
+      function drawPins(g) {
+        const counts = {};
+        (g.contracts || []).forEach((c, i) => {
+          if (["delivered", "failed", "expired", "lost_to_shadow"].includes(c.status)) return;
+          const key = c.status === "in_transit" ? c.dropoff : c.pickup;
+          counts[key] = (counts[key] || 0) + 1;
+          const p = world(parseHexId(key));
+          const bump = (counts[key] - 1) * 11;
+          const rad = Math.max(11, view.size * 0.26);
+          ctx.beginPath(); ctx.arc(p.x + bump, p.y, rad, 0, Math.PI * 2);
+          ctx.fillStyle = c.weight === "heavy" ? "#e06868" : c.risk === "high" ? "#d4b44a" : "#5aa6d4";
+          ctx.fill();
+          ctx.fillStyle = "#0b0f14";
+          ctx.font = `800 ${Math.max(10, view.size * 0.24)}px sans-serif`;
+          ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.fillText(String(i + 1), p.x + bump, p.y + 1);
+        });
       }
-
+      function setHint(text, kind) {
+        const el = document.getElementById("hint");
+        el.textContent = text; el.className = kind || "";
+      }
+      function hintText() {
+        if (!game?.map) return "Подключение…";
+        if (game.reject?.reason) return rejectRu[game.reject.reason] || "Нельзя.";
+        if (game.status === "finished") return "Смена окончена — Black Box.";
+        const r = activeRover();
+        if (r?.state === "stranded") return "Выбранный ровер сел. Возьми второго.";
+        if (r?.state === "moving") return "Едет. Новый клик не откатывает — доедет клетку и свернёт.";
+        return "Выбери Swift или Hauler, затем заказ. Тяжёлое — только Hauler. На базе можно зарядиться.";
+      }
       function draw() {
         const w = canvas.clientWidth, h = canvas.clientHeight;
         ctx.clearRect(0, 0, w, h);
-        if (!game) return;
+        if (!game?.map) return;
         view = computeView(game);
-        drawEarth(w, h);
-        const tx = terminatorX(game);
-        drawStars(w, h, tx, game.map.terminator.direction === "west");
         drawShadowBand(game, w, h);
-
-        const pathSet = new Set(game.rover.path || []);
+        const act = activeRover();
+        const pathSet = new Set(act?.path || []);
         for (const hex of game.map.hexes) {
           const p = world(hex);
           let fill = colors[hex.type] || "#666";
           if (hex.inShadow) fill = "#121a22";
-          else if (hex.type === "solar_plateau") fill = "#c9a22755";
-          const stroke = pathSet.has(hex.id) ? "#f0f0f0" : hex.inShadow ? "#243040" : "#2a333c";
-          const glow = hex.type === "base" ? "rgba(201,162,39,0.5)" : null;
-          drawHex(p.x, p.y, fill, stroke, glow);
-          if (hex.phaseEta > 0 && hex.phaseEta < 120 && !hex.inShadow) {
-            ctx.fillStyle = "rgba(201,162,39,0.7)";
-            ctx.font = `${Math.max(9, view.size * 0.22)}px sans-serif`;
-            ctx.textAlign = "center";
-            ctx.fillText(Math.ceil(hex.phaseEta) + "s", p.x, p.y + 4);
-          }
+          const hover = hoverHex && hoverHex.id === hex.id;
+          drawHex(p.x, p.y, fill, pathSet.has(hex.id) ? "#fff" : hover ? "#d4b44a" : "#2a333c", hex.type === "base" ? "rgba(212,180,74,0.4)" : null);
         }
-
-        const rp = roverPixel(game);
-        ctx.beginPath();
-        ctx.arc(rp.x, rp.y, view.size * 0.22, 0, Math.PI * 2);
-        ctx.fillStyle = game.rover.state === "stranded" ? "#c44" : "#fff";
-        ctx.shadowColor = "#fff";
-        ctx.shadowBlur = game.rover.state === "moving" ? 12 : 4;
-        ctx.fill();
-        ctx.shadowBlur = 0;
-
-        document.getElementById("t").textContent = (game.t || 0).toFixed(1);
-        document.getElementById("bat").textContent = Math.max(0, game.rover.battery).toFixed(0);
-        const here = game.map.hexes.find((x) => x.id === game.rover.hex);
-        document.getElementById("eta").textContent = here ? here.phaseEta.toFixed(0) : "—";
-        document.getElementById("seed").textContent = game.seed;
+        if (game.ghost?.points?.length > 1) {
+          drawPolyline(game.ghost.points.map((pt) => world(pt)), "rgba(90,166,212,0.3)", 2, [5, 7]);
+        }
+        for (const r of rovers()) {
+          const path = r.path || [];
+          if (!path.length) continue;
+          const off = r.type === "hauler" ? 8 : -8;
+          const rp = roverPixel(r, off);
+          const pts = [rp, ...path.map((id) => world(parseHexId(id)))];
+          const ok = r.type !== game.activeRover || !game.routePreview || game.routePreview.feasible;
+          drawPolyline(pts, r.type === "hauler" ? "rgba(90,166,212,0.8)" : (ok ? "rgba(240,240,240,0.85)" : "rgba(224,104,104,0.95)"), 3.5);
+        }
+        drawPins(game);
+        rovers().forEach((r) => {
+          const off = r.type === "hauler" ? 8 : -8;
+          const p = roverPixel(r, off);
+          ctx.beginPath();
+          if (r.type === "hauler") ctx.rect(p.x - view.size * 0.18, p.y - view.size * 0.18, view.size * 0.36, view.size * 0.36);
+          else ctx.arc(p.x, p.y, view.size * 0.2, 0, Math.PI * 2);
+          ctx.fillStyle = r.state === "stranded" ? "#e06868" : r.type === "hauler" ? "#5aa6d4" : "#fff";
+          ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = r.state === "moving" ? 12 : 4;
+          ctx.fill(); ctx.shadowBlur = 0;
+          if (r.type === game.activeRover) {
+            ctx.strokeStyle = "#d4b44a"; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(p.x, p.y, view.size * 0.32, 0, Math.PI * 2); ctx.stroke();
+          }
+        });
+        if (hoverHex) {
+          const p = world(hoverHex);
+          ctx.fillStyle = "rgba(7,11,16,0.88)";
+          ctx.fillRect(p.x - 78, p.y - view.size - 10, 156, 22);
+          ctx.fillStyle = "#eef1f4"; ctx.font = "11px sans-serif"; ctx.textAlign = "center";
+          const lab = terrainRu[hoverHex.type] || hoverHex.type;
+          ctx.fillText(hoverHex.inShadow ? lab + " · тень" : `${lab} · ${Math.ceil(hoverHex.phaseEta)}с`, p.x, p.y - view.size + 5);
+        }
+        const r = act;
+        const pct = Math.max(0, Math.min(100, r?.battery || 0));
+        document.getElementById("bat").textContent = pct.toFixed(0);
+        document.getElementById("batFill").style.transform = `scaleX(${pct / 100})`;
+        document.getElementById("colony").textContent = game.colonyScore ?? 0;
+        document.getElementById("earth").textContent = game.earthScore ?? 0;
+        const need = game.goal?.colonyNeed || 100;
+        document.getElementById("goalFill").style.width = Math.min(100, (game.colonyScore || 0) / need * 100) + "%";
+        const dur = game.goal?.duration || 180;
+        document.getElementById("left").textContent = Math.max(0, dur - (game.t || 0)).toFixed(0);
+        const here = game.map.hexes.find((x) => x.id === r?.hex);
+        document.getElementById("eta").textContent = here ? Math.max(0, here.phaseEta).toFixed(0) : "—";
+        document.getElementById("seed").textContent = game.seed || "";
+        document.getElementById("slots").textContent = `${r?.slotsUsed ?? 0}/${r?.slotsMax ?? 2}`;
+        document.getElementById("auto").textContent = "АВТО · " + (game.autonomyCharges ?? 0);
+        document.getElementById("auto").disabled = game.status === "finished" || !(game.autonomyCharges > 0);
+        const list = rovers();
+        const sw = list.find((x) => x.type === "swift");
+        const ha = list.find((x) => x.type === "hauler");
+        if (sw) document.getElementById("swStats").textContent = `${sw.battery.toFixed(0)}% · ${statusWord(sw)}`;
+        if (ha) document.getElementById("haStats").textContent = `${ha.battery.toFixed(0)}% · ${statusWord(ha)}`;
+        document.getElementById("btnSwift").classList.toggle("on", game.activeRover !== "hauler");
+        document.getElementById("btnHauler").classList.toggle("on", game.activeRover === "hauler");
+        const warn = game.reject?.reason || (game.routePreview && !game.routePreview.feasible);
+        setHint(hintText(), warn ? "warn" : "");
       }
-
+      function statusWord(r) {
+        if (r.state === "moving") return "едет";
+        if (r.state === "stranded") return "сел";
+        return "ждёт";
+      }
+      function blockedReason(c) {
+        const r = activeRover();
+        if (!r) return "";
+        if (c.weight === "heavy" && !r.canHeavy) return "swift_no_heavy";
+        if (c.status === "queued" && (r.slotsUsed || 0) >= (r.slotsMax || 2)) return "slots_full";
+        return "";
+      }
       function renderContracts() {
         const el = document.getElementById("contracts");
         el.innerHTML = "";
-        if (!game) return;
-        for (const c of game.contracts) {
+        if (!game?.contracts) return;
+        game.contracts.forEach((c, i) => {
           const d = document.createElement("div");
-          d.className = "card" + (c.status === "accepted" || c.status === "in_transit" ? " active" : "");
-          d.innerHTML = `<div>${c.title}</div><div>${c.status} · ${c.weight}</div>`;
+          const done = ["delivered", "failed", "expired", "lost_to_shadow"].includes(c.status);
+          const block = blockedReason(c);
+          d.className = "card" + ((c.status === "accepted" || c.status === "in_transit" || selectedId === c.id) ? " active" : "") + (done ? " done" : "") + (block && c.status === "queued" ? " blocked" : "");
+          const who = c.assignedTo ? ` · ${c.assignedTo}` : "";
+          d.innerHTML = `<h3><span class="num">${i + 1}</span>${c.title}</h3>
+            <div class="stats">
+              <span>вес <b>${weightRu[c.weight] || c.weight}</b></span>
+              <span>награда <b>${c.reward ?? c.colonyValue + c.earthValue}</b></span>
+              <span>срок <b>${urgRu[c.urgency] || "нет"}</b></span>
+              <span>риск <b>${riskRu[c.risk] || c.risk}</b></span>
+            </div>
+            <div class="stats" style="margin-top:6px"><span>${statusRu[c.status] || c.status}${who}</span><span>${block ? "нельзя" : "нажми — поедет"}</span></div>`;
           d.onclick = () => {
-            if (ws && ws.readyState === 1 && c.status === "queued") {
-              ws.send(JSON.stringify({ type: "accept_contract", contractId: c.id }));
+            selectedId = c.id;
+            if (ws?.readyState === 1 && !done && game.status !== "finished") {
+              beep(520, 0.05);
+              ws.send(JSON.stringify({ type: "dispatch", contractId: c.id }));
             }
+            renderContracts();
           };
           el.appendChild(d);
+        });
+      }
+      function pickHex(x, y) {
+        if (!game?.map) return null;
+        let best = null, bestD = 1e9;
+        for (const hex of game.map.hexes) {
+          const p = world(hex);
+          const d = (p.x - x) ** 2 + (p.y - y) ** 2;
+          if (d < bestD) { bestD = d; best = hex; }
         }
+        return bestD < view.size * view.size * 1.5 ? best : null;
       }
-
-      function log(msg) {
-        const el = document.getElementById("log");
-        el.textContent = msg + "\n" + el.textContent.slice(0, 400);
+      function pickRover(x, y) {
+        for (const r of rovers()) {
+          const off = r.type === "hauler" ? 8 : -8;
+          const p = roverPixel(r, off);
+          if ((p.x - x) ** 2 + (p.y - y) ** 2 < view.size * view.size * 0.35) return r;
+        }
+        return null;
       }
-
+      function contractOnHex(hex) {
+        return (game.contracts || []).find((c) => {
+          if (["delivered", "failed", "expired", "lost_to_shadow"].includes(c.status)) return false;
+          const key = c.status === "in_transit" ? c.dropoff : c.pickup;
+          return key === hex.id;
+        });
+      }
+      function selectRover(type) {
+        if (ws?.readyState === 1) ws.send(JSON.stringify({ type: "select_rover", rover: type }));
+      }
+      async function showBlackBox() {
+        if (!gameId) return;
+        beep(180, 0.2);
+        try {
+          const data = await (await fetch(`/api/v1/games/${gameId}/blackbox`)).json();
+          shareUrl = data.shareUrl || ("/?seed=" + (game.seed || ""));
+          document.getElementById("modalTitle").textContent = outcomeTitle[data.outcome] || "Black Box";
+          document.getElementById("modalText").textContent = data.verdict || "Смена окончена.";
+          document.getElementById("modalMeta").textContent = `Колония ${data.colonyScore} · Земля ${data.earthScore} · ${data.seed}`;
+        } catch {
+          document.getElementById("modalText").textContent = "Смена окончена.";
+        }
+        document.getElementById("modal").classList.add("open");
+      }
       function apply(msg) {
+        if (!msg || msg.error || !msg.map) return;
+        const prev = game?.colonyScore || 0;
         game = msg;
+        if ((msg.colonyScore || 0) > prev) {
+          beep(880, 0.09);
+          setHint("Доставка +" + (msg.colonyScore - prev) + " колонии", "ok");
+        }
         if (msg.deltaEvents) {
           for (const e of msg.deltaEvents) {
-            if (e.kind !== "tick" && e.kind !== "battery_low") log(`${e.t}s · ${e.kind}`);
+            if (e.kind === "deliver") beep(880, 0.09);
+            if (e.kind === "rejected" || e.kind === "stranded") beep(140, 0.12);
+            if (e.kind === "crisis") setHint("Кризис на карте.", "warn");
           }
         }
-        if (msg.type === "game_over") log("ИТОГ: " + (msg.outcome || "signal_lost"));
+        if (msg.type === "game_over") showBlackBox();
         renderContracts();
         draw();
       }
-
       function connect(id) {
         wsIntentionalClose = true;
         if (ws) ws.close();
+        clearTimeout(reconnectTimer);
         wsIntentionalClose = false;
         gameId = id;
         const proto = location.protocol === "https:" ? "wss" : "ws";
         ws = new WebSocket(`${proto}://${location.host}/ws/game/${id}`);
         ws.onmessage = (ev) => apply(JSON.parse(ev.data));
         ws.onclose = () => {
-          if (!wsIntentionalClose && gameId) {
-            log("переподключение…");
-            setTimeout(() => connect(gameId), 800);
-          }
+          if (wsIntentionalClose || game?.status === "finished") return;
+          setHint("Переподключение…");
+          reconnectTimer = setTimeout(() => connect(gameId), 1200);
         };
-        ws.onerror = () => log("ws error");
       }
-
+      async function waitApi() {
+        for (let i = 0; i < 50; i++) {
+          try { if ((await fetch("/health", { cache: "no-store" })).ok) return true; } catch {}
+          await new Promise((r) => setTimeout(r, 400));
+        }
+        setHint("API не отвечает. docker compose up --build", "warn");
+        return false;
+      }
       async function newGame() {
+        document.getElementById("modal").classList.remove("open");
         wsIntentionalClose = true;
         if (ws) ws.close();
-        wsIntentionalClose = false;
+        clearTimeout(reconnectTimer);
+        if (!(await waitApi())) return;
+        const seed = new URLSearchParams(location.search).get("seed") || undefined;
         const res = await fetch("/api/v1/games", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ rover: "swift" }),
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rover: "swift", seed }),
         });
         const data = await res.json();
-        apply(data);
-        connect(data.id);
+        if (!data?.id) { setHint("Не удалось создать смену.", "warn"); return; }
+        apply(data); connect(data.id);
       }
-
+      function showTut() {
+        const s = slides[tutStep];
+        document.getElementById("tutTitle").textContent = s.title;
+        document.getElementById("tutText").textContent = s.text;
+        for (let i = 0; i < 4; i++) document.getElementById("d" + i).className = i === tutStep ? "on" : "";
+        document.getElementById("tutNext").textContent = tutStep === 3 ? "ПОНЯЛ" : "ДАЛЬШЕ";
+        document.getElementById("tutorial").classList.add("open");
+      }
+      function closeTut() {
+        localStorage.setItem("phaseline_tutorial_done", "1");
+        document.getElementById("tutorial").classList.remove("open");
+      }
       canvas.addEventListener("click", (ev) => {
-        if (!game || !ws || ws.readyState !== 1) return;
+        if (!game || !ws || ws.readyState !== 1 || game.status === "finished") return;
         const rect = canvas.getBoundingClientRect();
-        const x = ev.clientX - rect.left;
-        const y = ev.clientY - rect.top;
-        let best = null, bestD = 1e9;
-        for (const hex of game.map.hexes) {
-          const p = world(hex);
-          const dx = p.x - x, dy = p.y - y;
-          const d = dx * dx + dy * dy;
-          if (d < bestD) { bestD = d; best = hex; }
-        }
-        if (best && bestD < view.size * view.size * 1.4) {
-          ws.send(JSON.stringify({ type: "goto", hexId: best.id }));
+        const x = ev.clientX - rect.left, y = ev.clientY - rect.top;
+        const rv = pickRover(x, y);
+        if (rv) { selectRover(rv.type); beep(440, 0.04); return; }
+        const hex = pickHex(x, y);
+        if (!hex) return;
+        const c = contractOnHex(hex);
+        if (c) {
+          selectedId = c.id;
+          ws.send(JSON.stringify({ type: "dispatch", contractId: c.id }));
+          beep(520, 0.05);
+        } else {
+          ws.send(JSON.stringify({ type: "goto", hexId: hex.id }));
+          beep(360, 0.04);
         }
       });
-
-      document.getElementById("deploy").onclick = () => {
-        if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: "deploy" }));
-      };
-      document.getElementById("auto").onclick = () => {
-        if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: "autonomy" }));
-      };
+      canvas.addEventListener("pointermove", (ev) => {
+        const rect = canvas.getBoundingClientRect();
+        hoverHex = pickHex(ev.clientX - rect.left, ev.clientY - rect.top);
+        draw();
+      });
+      document.getElementById("btnSwift").onclick = () => selectRover("swift");
+      document.getElementById("btnHauler").onclick = () => selectRover("hauler");
+      document.getElementById("auto").onclick = () => { if (ws?.readyState === 1) ws.send(JSON.stringify({ type: "autonomy" })); };
       document.getElementById("new").onclick = newGame;
+      document.getElementById("help").onclick = () => { tutStep = 0; showTut(); };
+      document.getElementById("closeModal").onclick = newGame;
+      document.getElementById("tutSkip").onclick = closeTut;
+      document.getElementById("tutNext").onclick = () => { if (tutStep >= 3) closeTut(); else { tutStep += 1; showTut(); } };
+      document.getElementById("share").onclick = async () => {
+        const url = location.origin + (shareUrl || ("/?seed=" + (game?.seed || "")));
+        try { await navigator.clipboard.writeText(url); setHint("Ссылка скопирована."); }
+        catch { prompt("Сид:", url); }
+      };
       window.addEventListener("resize", resize);
       resize();
+      if (!localStorage.getItem("phaseline_tutorial_done")) showTut();
       newGame();
     </script>
   </body>
