@@ -128,54 +128,59 @@ func (s *GameState) GoTo(hexID string) error {
 	}
 
 	from := Axial{Q: r.Q, R: r.R}
-	keepProgress := 0.0
-	var keep *Axial
-	if r.State == RoverMoving && len(r.Path) > 0 && r.Progress > 0.02 {
-		cur := r.Path[0]
-		keep = &cur
-		keepProgress = r.Progress
-		from = cur
+	midEdge := r.State == RoverMoving && len(r.Path) > 0 && r.Progress > 0.04
+	oldNext := Axial{}
+	if midEdge {
+		if r.Reversing {
+			oldNext = r.ReverseTo
+		} else {
+			oldNext = r.Path[0]
+		}
 	}
 
 	if from == to {
-		if keep != nil {
-			r.Path = []Axial{*keep}
-			r.Progress = keepProgress
+		if midEdge {
+			r.Reversing = true
+			r.ReverseTo = oldNext
+			r.Path = nil
 			return nil
 		}
 		r.Path = nil
+		r.Reversing = false
 		r.State = RoverIdle
 		r.Progress = 0
 		return nil
 	}
 
-	rest := s.FindPath(from, to)
-	if len(rest) == 0 {
+	path := s.FindPath(from, to)
+	if len(path) == 0 {
 		s.reject("no_path", "")
 		return errInvalidRoute
-	}
-
-	path := rest
-	if keep != nil {
-		path = append([]Axial{*keep}, rest...)
 	}
 
 	pred := s.Predict(path)
 	if !pred.Feasible {
 		s.reject("battery", "")
-		if keep != nil {
-			return nil
+		if !midEdge {
+			r.Path = path
 		}
-		r.Path = path
 		return nil
 	}
-
 	s.LastReject = nil
 	r.Path = path
-	if keep != nil {
-		r.Progress = keepProgress
+
+	if midEdge {
+		sameHop := path[0] == oldNext
+		if sameHop && !r.Reversing {
+			r.Reversing = false
+			return s.startMoving(false)
+		}
+		r.Reversing = true
+		r.ReverseTo = oldNext
 		return s.startMoving(false)
 	}
+
+	r.Reversing = false
 	return s.startMoving(true)
 }
 

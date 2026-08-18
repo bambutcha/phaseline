@@ -105,6 +105,8 @@ type Rover struct {
 	Cargo      []CargoType `json:"cargo"`
 	SunIdle    float64     `json:"-"`
 	PanicLeft  int         `json:"-"`
+	Reversing  bool        `json:"-"`
+	ReverseTo  Axial       `json:"-"`
 }
 
 type Contract struct {
@@ -153,6 +155,7 @@ type GameState struct {
 	Events       []Event
 	Ghost        *GhostReplay
 	LastReject   *RejectView
+	noChain      bool
 }
 
 type RejectView struct {

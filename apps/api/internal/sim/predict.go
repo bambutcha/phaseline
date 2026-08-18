@@ -45,6 +45,7 @@ func (s *GameState) Clone() *GameState {
 func (s *GameState) Predict(path []Axial) Prediction {
 	cp := s.Clone()
 	cp.Events = nil
+	cp.noChain = true
 	r := cp.R()
 	r.Path = append([]Axial(nil), path...)
 	if cp.Status != StatusActive {

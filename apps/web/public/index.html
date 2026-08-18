@@ -142,7 +142,7 @@
       const slides = [
         { title: "Линия наступает.", text: "Золотая полоса — терминатор. Клетки справа (или слева) уходят в тень: батарея садится быстрее, заказы сгорают. Это враг, не таймер в углу." },
         { title: "Два ровера. Всех не спасти.", text: "Swift быстрый, но не везёт тяжёлое. Hauler медленнее и тащит стержни и гелий-3. У каждого 2 слота. Восемь заказов — выбери, кого спасать." },
-        { title: "Клик — едет. Новый клик не сбрасывает.", text: "Нажми номер на карте или карточку. Ровер стартует сам. Если кликнуть другую клетку на ходу, он доедет текущую и только потом свернёт. На базе батарея растёт." },
+        { title: "Клик — едет. Новый клик плавно сворачивает.", text: "Нажми номер на карте или карточку. Ровер стартует сам и сам везёт груз до сдачи. Если кликнуть другую клетку на ходу, он развернётся с текущей позиции — без отката на базу. На базе батарея растёт." },
         { title: "Цель смены.", text: "Набери 100 очков колонии, пока тень не сожрёт карту. Земля тоже считает прибыль. Красный путь = доставка невозможна. Понял — играй." },
       ];
 
@@ -189,9 +189,11 @@
       }
       function roverPixel(r, offset) {
         const cur = world({ q: r.q, r: r.r });
+        let nxt = null;
+        if (r.reversing && r.reverseHex) nxt = world(parseHexId(r.reverseHex));
+        else if (r.path?.length && r.progress > 0) nxt = world(parseHexId(r.path[0]));
         let p = cur;
-        if (r.path?.length && r.progress > 0) {
-          const nxt = world(parseHexId(r.path[0]));
+        if (nxt && r.progress > 0) {
           p = { x: cur.x + (nxt.x - cur.x) * r.progress, y: cur.y + (nxt.y - cur.y) * r.progress };
         }
         return { x: p.x + (offset || 0), y: p.y };
@@ -272,7 +274,7 @@
         if (game.status === "finished") return "Смена окончена — Black Box.";
         const r = activeRover();
         if (r?.state === "stranded") return "Выбранный ровер сел. Возьми второго.";
-        if (r?.state === "moving") return "Едет. Новый клик не откатывает — доедет клетку и свернёт.";
+        if (r?.state === "moving") return r.reversing ? "Разворот. Линия уже на новую клетку." : "Едет. Клик по другой клетке плавно сворачивает путь.";
         return "Выбери Swift или Hauler, затем заказ. Тяжёлое — только Hauler. На базе можно зарядиться.";
       }
       function draw() {
@@ -306,6 +308,14 @@
         rovers().forEach((r) => {
           const off = r.type === "hauler" ? 8 : -8;
           const p = roverPixel(r, off);
+          if (r.state === "moving") {
+            ctx.fillStyle = "rgba(201,162,39,0.25)";
+            for (let i = 1; i <= 4; i++) {
+              ctx.beginPath();
+              ctx.arc(p.x - i * 3, p.y + (i % 2) * 2, 2, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          }
           ctx.beginPath();
           if (r.type === "hauler") ctx.rect(p.x - view.size * 0.18, p.y - view.size * 0.18, view.size * 0.36, view.size * 0.36);
           else ctx.arc(p.x, p.y, view.size * 0.2, 0, Math.PI * 2);
@@ -425,7 +435,7 @@
         beep(180, 0.2);
         try {
           const data = await (await fetch(`/api/v1/games/${gameId}/blackbox`)).json();
-          shareUrl = data.shareUrl || ("/?seed=" + (game.seed || ""));
+          shareUrl = data.shareUrl || ("/s/" + (game.seed || ""));
           document.getElementById("modalTitle").textContent = outcomeTitle[data.outcome] || "Black Box";
           document.getElementById("modalText").textContent = data.verdict || "Смена окончена.";
           document.getElementById("modalMeta").textContent = `Колония ${data.colonyScore} · Земля ${data.earthScore} · ${data.seed}`;
@@ -535,7 +545,7 @@
       document.getElementById("tutSkip").onclick = closeTut;
       document.getElementById("tutNext").onclick = () => { if (tutStep >= 3) closeTut(); else { tutStep += 1; showTut(); } };
       document.getElementById("share").onclick = async () => {
-        const url = location.origin + (shareUrl || ("/?seed=" + (game?.seed || "")));
+        const url = location.origin + (shareUrl || ("/s/" + (game?.seed || "")));
         try { await navigator.clipboard.writeText(url); setHint("Ссылка скопирована."); }
         catch { prompt("Сид:", url); }
       };

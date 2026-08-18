@@ -84,7 +84,7 @@ func TestLowBatteryDoesNotDeploy(t *testing.T) {
 	}
 }
 
-func TestGoToKeepsProgress(t *testing.T) {
+func TestGoToTurnsWithoutRewind(t *testing.T) {
 	s := NewGame("MCC-TEST", RoverSwift)
 	from := Axial{Q: s.R().Q, R: s.R().R}
 	var a, b Axial
@@ -110,7 +110,7 @@ func TestGoToKeepsProgress(t *testing.T) {
 	if len(s.R().Path) == 0 {
 		t.Fatal("no path")
 	}
-	next := s.R().Path[0]
+	oldNext := s.R().Path[0]
 	s.R().Progress = 0.4
 	s.R().State = RoverMoving
 	if err := s.GoTo(b.ID()); err != nil {
@@ -119,8 +119,66 @@ func TestGoToKeepsProgress(t *testing.T) {
 	if s.R().Progress < 0.39 {
 		t.Fatalf("progress reset to %v", s.R().Progress)
 	}
-	if len(s.R().Path) == 0 || s.R().Path[0] != next {
-		t.Fatalf("current edge dropped: %v want %v", s.R().Path, next)
+	end := s.R().Path[len(s.R().Path)-1]
+	if end != b {
+		t.Fatalf("path end=%v want %v", end, b)
+	}
+	if s.R().Path[0] == oldNext {
+		if s.R().Reversing {
+			t.Fatal("same hop should not reverse")
+		}
+		return
+	}
+	if !s.R().Reversing {
+		t.Fatal("expected reverse onto new heading")
+	}
+	if s.R().ReverseTo != oldNext {
+		t.Fatalf("reverseTo=%v want %v", s.R().ReverseTo, oldNext)
+	}
+}
+
+func TestReverseThenFollowsNewPath(t *testing.T) {
+	s := NewGame("MCC-TEST", RoverSwift)
+	s.Status = StatusActive
+	from := Axial{Q: s.R().Q, R: s.R().R}
+	var a, b Axial
+	n := 0
+	for _, h := range s.Map {
+		if h.Axial() == from || h.Impassable {
+			continue
+		}
+		if CubeDistance(from, h.Axial()) != 1 {
+			continue
+		}
+		if n == 0 {
+			a = h.Axial()
+		} else {
+			b = h.Axial()
+			break
+		}
+		n++
+	}
+	if a == (Axial{}) || b == (Axial{}) {
+		t.Skip("need two neighbors")
+	}
+	_ = s.GoTo(a.ID())
+	s.R().Progress = 0.5
+	s.R().State = RoverMoving
+	_ = s.GoTo(b.ID())
+	if !s.R().Reversing {
+		t.Skip("same hop")
+	}
+	for i := 0; i < 80; i++ {
+		s.Tick(TickDT)
+		if !s.R().Reversing {
+			break
+		}
+	}
+	if s.R().Reversing {
+		t.Fatal("still reversing")
+	}
+	if s.R().State == RoverMoving && len(s.R().Path) > 0 && s.R().Path[len(s.R().Path)-1] != b {
+		t.Fatalf("end=%v", s.R().Path[len(s.R().Path)-1])
 	}
 }
 
@@ -188,5 +246,39 @@ func TestContractsHaveRiskAndReward(t *testing.T) {
 		if c.Risk == "" || c.Urgency == "" {
 			t.Fatalf("missing risk/urgency %#v", c)
 		}
+	}
+}
+
+func TestContinueJobAfterPickup(t *testing.T) {
+	s := NewGame("MCC-TEST", RoverHauler)
+	var c *Contract
+	for i := range s.Contracts {
+		if s.Contracts[i].Weight != WeightClassHeavy {
+			c = &s.Contracts[i]
+			break
+		}
+	}
+	if c == nil {
+		t.Fatal("need a contract")
+	}
+	if err := s.Accept(c.ID); err != nil {
+		t.Fatal(err)
+	}
+	ax, err := ParseHexID(c.Pickup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.R().Q, s.R().R = ax.Q, ax.R
+	s.Status = StatusActive
+	s.tryPickupDrop()
+	s.continueJob()
+	if c.Pickup == c.Dropoff {
+		return
+	}
+	if len(s.R().Path) == 0 {
+		t.Fatal("should auto-route to dropoff")
+	}
+	if s.R().Path[len(s.R().Path)-1].ID() != c.Dropoff {
+		t.Fatalf("end=%v drop=%s", s.R().Path[len(s.R().Path)-1], c.Dropoff)
 	}
 }

@@ -11,15 +11,15 @@
 
 | Фаза | Цель | Готово, когда |
 |---|---|---|
-| **0** | Compose + Caddy + `/health` + заглушка web | `docker compose up` открывает страницу и health |
-| **1** | `internal/sim` + hex + seed gen + тесты | `go test ./internal/sim/...` зелёный, детерминизм сида |
-| **2** | goose + sqlc + `POST /games` | Postman/curl создаёт игру, карта в JSON |
-| **3** | Tick + WS + deploy | ровер едет, батарея падает, тень ползёт (хоть без сока) |
-| **4** | Canvas + mobile layout | playable на телефоне и PC |
-| **5** | Контракты, грузы, кризис | правила из SIM.md |
-| **6** | Ghost + `/s/[seed]` + Black Box | реиграбельность |
-| **7** | Juice, звук, туториал | wow |
-| **8** | README, скриншоты, AI-секция | сдача |
+| **0** | Compose + Caddy + `/health` + web | ✅ `docker compose up` |
+| **1** | `internal/sim` + hex + seed + тесты | ✅ `go test ./internal/sim/...` |
+| **2** | goose + sqlc + `POST /games` | ✅ |
+| **3** | Tick + WS + deploy | ✅ |
+| **4** | Canvas + mobile layout | ✅ static Canvas, не Next.js |
+| **5** | Контракты, грузы, кризис | ✅ |
+| **6** | Ghost + `/s/[seed]` + Black Box | ✅ |
+| **7** | Juice, звук, туториал | ✅ обучение, бипы, разворот |
+| **8** | README, AI-секция | ✅ скриншоты — сделать при сдаче |
 
 ## Команды (когда код появится)
 

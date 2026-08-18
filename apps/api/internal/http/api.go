@@ -314,7 +314,7 @@ func (s *Server) blackbox(c *gin.Context) {
 		ID:       rt.ID,
 		Snapshot: rt.State.Snapshot(),
 		Verdict:  sim.VerdictText(rt.State.Outcome, rt.State.Seed),
-		Share:    "/?seed=" + rt.State.Seed,
+		Share:    "/s/" + rt.State.Seed,
 	})
 }
 

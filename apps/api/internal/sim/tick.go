@@ -48,9 +48,14 @@ func (s *GameState) tickRover(dt float64) {
 
 func (s *GameState) tickMove(dt float64) {
 	r := s.R()
+	if r.Reversing {
+		s.tickReverse(dt)
+		return
+	}
 	if len(r.Path) == 0 {
 		r.State = RoverIdle
 		r.Progress = 0
+		s.continueJob()
 		return
 	}
 	next := r.Path[0]
@@ -109,10 +114,84 @@ func (s *GameState) tickMove(dt float64) {
 	s.tryPickupDrop()
 	if len(r.Path) == 0 {
 		r.State = RoverIdle
+		s.continueJob()
 	}
 	if r.Battery <= 0 {
 		r.Battery = 0
 	}
+}
+
+func (s *GameState) tickReverse(dt float64) {
+	r := s.R()
+	hex, ok := s.Map[r.ReverseTo.ID()]
+	if !ok {
+		r.Reversing = false
+		r.Progress = 0
+		if len(r.Path) > 0 {
+			r.State = RoverMoving
+		} else {
+			r.State = RoverIdle
+			s.continueJob()
+		}
+		return
+	}
+	cost := s.MoveCost(hex)
+	speed := s.roverSpeed()
+	edgeTime := cost / speed
+	if edgeTime <= 0 {
+		edgeTime = TickDT
+	}
+	r.Progress -= dt / edgeTime
+	if r.Progress > 0 {
+		return
+	}
+	r.Progress = 0
+	r.Reversing = false
+	if len(r.Path) == 0 {
+		r.State = RoverIdle
+		s.continueJob()
+		return
+	}
+	r.State = RoverMoving
+}
+
+func (s *GameState) continueJob() {
+	if s.noChain {
+		return
+	}
+	r := s.R()
+	if r.State == RoverStranded || r.Reversing {
+		return
+	}
+	if len(r.Path) > 0 {
+		return
+	}
+	here := HexID(r.Q, r.R)
+	var next string
+	for _, c := range s.Contracts {
+		if c.AssignedTo != r.Type {
+			continue
+		}
+		if c.Status == ContractInTransit && c.Dropoff != here {
+			next = c.Dropoff
+			break
+		}
+	}
+	if next == "" {
+		for _, c := range s.Contracts {
+			if c.AssignedTo != r.Type {
+				continue
+			}
+			if c.Status == ContractAccepted && c.Pickup != here {
+				next = c.Pickup
+				break
+			}
+		}
+	}
+	if next == "" || next == here {
+		return
+	}
+	_ = s.GoTo(next)
 }
 
 func (s *GameState) tickBattery(dt float64) {

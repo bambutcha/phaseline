@@ -44,6 +44,8 @@ type RoverView struct {
 	SlotsUsed int         `json:"slotsUsed"`
 	SlotsMax  int         `json:"slotsMax"`
 	CanHeavy  bool        `json:"canHeavy"`
+	Reversing bool        `json:"reversing,omitempty"`
+	ReverseHex string     `json:"reverseHex,omitempty"`
 }
 
 type MapView struct {
@@ -123,13 +125,17 @@ func roverPath(r *Rover) []string {
 }
 
 func (s *GameState) roverView(r *Rover) RoverView {
-	return RoverView{
+	v := RoverView{
 		Type: r.Type, Name: roverName(r.Type),
 		Hex: HexID(r.Q, r.R), Q: r.Q, R: r.R, Progress: r.Progress,
 		Battery: r.Battery, Max: r.MaxBattery, State: r.State, Cargo: r.Cargo,
 		Path: roverPath(r), SlotsUsed: s.slotsFor(r.Type), SlotsMax: MaxActiveContracts,
-		CanHeavy: r.Type == RoverHauler,
+		CanHeavy: r.Type == RoverHauler, Reversing: r.Reversing,
 	}
+	if r.Reversing {
+		v.ReverseHex = r.ReverseTo.ID()
+	}
+	return v
 }
 
 func roverName(t RoverType) string {

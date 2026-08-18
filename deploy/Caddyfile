@@ -28,6 +28,9 @@
 		}
 	}
 
+	@share path_regexp share ^/s/([A-Za-z0-9-]+)$
+	redir @share /?seed={re.share.1} 302
+
 	handle {
 		reverse_proxy web:3000
 	}
