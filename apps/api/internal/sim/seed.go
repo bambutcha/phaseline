@@ -119,8 +119,8 @@ func NewGame(seed string, rover RoverType) *GameState {
 	}
 
 	crisis := crisisKinds[rng.Intn(len(crisisKinds))]
-	jitter := rng.Float64()*20 - 10
-	crisisAt := 0.4*GameDurationTargetSec + jitter
+	jitter := rng.Float64()*14 - 7
+	crisisAt := 0.35*GameDurationTargetSec + jitter
 
 	swift := NewRover(RoverSwift, start.Q, start.R)
 	hauler := NewRover(RoverHauler, start.Q, start.R)
@@ -182,16 +182,28 @@ func (s *GameState) rollContracts(rng *rand.Rand, westBase, eastBase string, ids
 				drop = westBase
 			}
 		}
+		impossible := false
+		if i == ContractsPerGame-1 {
+			spec = cargoPool[5] // Helium-3, heavy, Earth-heavy — typically not completable in time
+			pick = s.farthestHex(ids)
+			if s.Terminator.Direction == DirWest {
+				drop = eastBase
+			} else {
+				drop = westBase
+			}
+			impossible = true
+			spec.title = "Helium-3 — почти нереально успеть"
+		}
 		ph := s.Map[pick]
 		risk := hexRisk(ph)
 		urgency := "low"
-		deadline := spec.deadline
+		deadline := 0.0
 		if spec.cargo == CargoMedSeeds {
-			deadline = 80 + rng.Float64()*40
-		}
-		if deadline > 0 {
+			deadline = 50 + rng.Float64()*25
 			urgency = "high"
-		} else if risk == "high" {
+		} else if risk == "high" || impossible {
+			urgency = "high"
+		} else if spec.weight == WeightClassHeavy {
 			urgency = "medium"
 		}
 		out = append(out, Contract{
@@ -208,7 +220,26 @@ func (s *GameState) rollContracts(rng *rand.Rand, westBase, eastBase string, ids
 			Urgency:     urgency,
 			Deadline:    deadline,
 			Status:      ContractQueued,
+			Impossible:  impossible,
 		})
 	}
 	return out
+}
+
+func (s *GameState) farthestHex(ids []string) string {
+	from := Axial{Q: s.Rovers[0].Q, R: s.Rovers[0].R}
+	best := ids[0]
+	bestD := -1
+	for _, id := range ids {
+		ax, err := ParseHexID(id)
+		if err != nil {
+			continue
+		}
+		d := CubeDistance(from, ax)
+		if d > bestD {
+			bestD = d
+			best = id
+		}
+	}
+	return best
 }

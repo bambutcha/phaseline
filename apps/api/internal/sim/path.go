@@ -128,20 +128,18 @@ func (s *GameState) GoTo(hexID string) error {
 	}
 
 	from := Axial{Q: r.Q, R: r.R}
-	midEdge := r.State == RoverMoving && len(r.Path) > 0 && r.Progress > 0.04
-	oldNext := Axial{}
-	if midEdge {
-		if r.Reversing {
-			oldNext = r.ReverseTo
-		} else {
-			oldNext = r.Path[0]
-		}
+	locked := r.State == RoverMoving && r.Progress > 0.02 && len(r.Path) > 0 && !r.Reversing
+	var through Axial
+	if locked {
+		through = r.Path[0]
 	}
 
 	if from == to {
-		if midEdge {
+		if locked || (r.State == RoverMoving && r.Progress > 0.02 && (len(r.Path) > 0 || r.Reversing)) {
+			if !r.Reversing && len(r.Path) > 0 {
+				r.ReverseTo = r.Path[0]
+			}
 			r.Reversing = true
-			r.ReverseTo = oldNext
 			r.Path = nil
 			return nil
 		}
@@ -152,43 +150,45 @@ func (s *GameState) GoTo(hexID string) error {
 		return nil
 	}
 
-	path := s.FindPath(from, to)
-	if len(path) == 0 {
-		s.reject("no_path", "")
-		return errInvalidRoute
+	var path []Axial
+	if locked {
+		if through == to {
+			path = []Axial{through}
+		} else {
+			rest := s.FindPath(through, to)
+			if len(rest) == 0 {
+				s.reject("no_path", "")
+				return errInvalidRoute
+			}
+			path = append([]Axial{through}, rest...)
+		}
+	} else {
+		path = s.FindPath(from, to)
+		if len(path) == 0 {
+			s.reject("no_path", "")
+			return errInvalidRoute
+		}
 	}
 
 	pred := s.Predict(path)
 	if !pred.Feasible {
 		s.reject("battery", "")
-		if !midEdge {
+		if !locked {
 			r.Path = path
 		}
 		return nil
 	}
 	s.LastReject = nil
-	r.Path = path
-
-	if midEdge {
-		sameHop := path[0] == oldNext
-		if sameHop && !r.Reversing {
-			r.Reversing = false
-			return s.startMoving(false)
-		}
-		r.Reversing = true
-		r.ReverseTo = oldNext
-		return s.startMoving(false)
-	}
-
 	r.Reversing = false
-	return s.startMoving(true)
+	r.Path = path
+	return s.startMoving(locked)
 }
 
 func (s *GameState) Deploy() error {
-	return s.startMoving(true)
+	return s.startMoving(false)
 }
 
-func (s *GameState) startMoving(resetProgress bool) error {
+func (s *GameState) startMoving(keepProgress bool) error {
 	r := s.R()
 	if s.Status == StatusFinished || r.State == RoverStranded {
 		return errGameOver
@@ -197,7 +197,7 @@ func (s *GameState) startMoving(resetProgress bool) error {
 		return errInvalidRoute
 	}
 	r.State = RoverMoving
-	if resetProgress {
+	if !keepProgress {
 		r.Progress = 0
 	}
 	if s.Status == StatusLobby {

@@ -273,20 +273,20 @@ PWA (manifest + иконки) — nice-to-have, не блокер MVP.
 
 ### В v1
 
-- [ ] Seed-карта + 5–7 контрактов
-- [ ] Swift / Hauler
-- [ ] Terminator real-time + Phase ETA
-- [ ] Preview + deploy + reroute
-- [ ] Грузы со special rules
-- [ ] 1 кризис на забег
-- [ ] Ghost на сиде
-- [ ] Share `/s/[seed]`
-- [ ] Black Box
-- [ ] Mobile + desktop
-- [ ] REST + WebSocket
-- [ ] `docker compose up` → игра на :80
-- [ ] Юнит-тесты `internal/sim`
-- [ ] README: запуск, AI usage, решения
+- [x] Seed-карта + 5–7 контрактов
+- [x] Swift / Hauler
+- [x] Terminator real-time + Phase ETA
+- [x] Preview + deploy + reroute
+- [x] Грузы со special rules
+- [x] 1 кризис на забег
+- [x] Ghost на сиде
+- [x] Share `/s/[seed]`
+- [x] Black Box
+- [x] Mobile + desktop
+- [x] REST + WebSocket
+- [x] `docker compose up` → игра на :80
+- [x] Юнит-тесты `internal/sim`
+- [x] README: запуск, AI usage, решения
 
 ### Не в v1
 

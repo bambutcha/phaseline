@@ -110,34 +110,31 @@ func TestGoToTurnsWithoutRewind(t *testing.T) {
 	if len(s.R().Path) == 0 {
 		t.Fatal("no path")
 	}
-	oldNext := s.R().Path[0]
-	s.R().Progress = 0.4
+	s.R().Progress = 0.6
 	s.R().State = RoverMoving
+	held := s.R().Path[0]
 	if err := s.GoTo(b.ID()); err != nil {
 		t.Fatal(err)
 	}
-	if s.R().Progress < 0.39 {
-		t.Fatalf("progress reset to %v", s.R().Progress)
+	if s.R().Progress < 0.59 {
+		t.Fatalf("progress reset to %v — position was lost", s.R().Progress)
+	}
+	if s.R().Path[0] != held {
+		t.Fatalf("current edge changed from %v to %v — rover would rewind", held, s.R().Path[0])
+	}
+	if s.R().Reversing {
+		t.Fatal("retarget should not reverse back to the previous hex")
 	}
 	end := s.R().Path[len(s.R().Path)-1]
 	if end != b {
 		t.Fatalf("path end=%v want %v", end, b)
 	}
-	if s.R().Path[0] == oldNext {
-		if s.R().Reversing {
-			t.Fatal("same hop should not reverse")
-		}
-		return
-	}
-	if !s.R().Reversing {
-		t.Fatal("expected reverse onto new heading")
-	}
-	if s.R().ReverseTo != oldNext {
-		t.Fatalf("reverseTo=%v want %v", s.R().ReverseTo, oldNext)
+	if s.R().Q != from.Q || s.R().R != from.R {
+		t.Fatal("committed hex should stay until the edge finishes")
 	}
 }
 
-func TestReverseThenFollowsNewPath(t *testing.T) {
+func TestRetargetKeepsMoving(t *testing.T) {
 	s := NewGame("MCC-TEST", RoverSwift)
 	s.Status = StatusActive
 	from := Axial{Q: s.R().Q, R: s.R().R}
@@ -162,23 +159,81 @@ func TestReverseThenFollowsNewPath(t *testing.T) {
 		t.Skip("need two neighbors")
 	}
 	_ = s.GoTo(a.ID())
-	s.R().Progress = 0.5
+	s.R().Progress = 0.6
 	s.R().State = RoverMoving
+	held := s.R().Path[0]
 	_ = s.GoTo(b.ID())
-	if !s.R().Reversing {
-		t.Skip("same hop")
+	if s.R().Reversing {
+		t.Fatal("should keep the current edge, not back up")
 	}
-	for i := 0; i < 80; i++ {
-		s.Tick(TickDT)
-		if !s.R().Reversing {
+	if s.R().Path[0] != held {
+		t.Fatalf("must finish current hex first, path[0]=%v held=%v", s.R().Path[0], held)
+	}
+	s.Tick(TickDT)
+	if s.R().Progress <= 0.6 {
+		t.Fatalf("should keep advancing along the same edge, progress=%v", s.R().Progress)
+	}
+	if s.R().Q != from.Q || s.R().R != from.R {
+		t.Fatal("must stay on the committed hex until the edge completes")
+	}
+}
+
+func TestQueuedLostWhenPickupDark(t *testing.T) {
+	s := NewGame("MCC-TEST", RoverSwift)
+	s.Status = StatusActive
+	var c *Contract
+	for i := range s.Contracts {
+		if s.Contracts[i].Status == ContractQueued {
+			c = &s.Contracts[i]
 			break
 		}
 	}
-	if s.R().Reversing {
-		t.Fatal("still reversing")
+	if c == nil {
+		t.Fatal("need queued contract")
 	}
-	if s.R().State == RoverMoving && len(s.R().Path) > 0 && s.R().Path[len(s.R().Path)-1] != b {
-		t.Fatalf("end=%v", s.R().Path[len(s.R().Path)-1])
+	ax, err := ParseHexID(c.Pickup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Terminator.Direction = DirEast
+	s.Terminator.Pos = float64(ax.Q) + 2
+	if !s.InShadow(ax.Q, ax.R) {
+		t.Fatal("pickup should be in shadow")
+	}
+	s.Tick(TickDT)
+	if c.Status != ContractLostShadow {
+		t.Fatalf("status=%s want lost_to_shadow", c.Status)
+	}
+}
+
+func TestShiftContinuesAfterJobsFail(t *testing.T) {
+	s := NewGame("MCC-TEST", RoverSwift)
+	s.Status = StatusActive
+	for i := range s.Contracts {
+		s.Contracts[i].Status = ContractExpired
+	}
+	s.Tick(TickDT)
+	if s.Status != StatusActive {
+		t.Fatalf("status=%s — shift must not end just because jobs expired", s.Status)
+	}
+}
+
+func TestSeedHasImpossibleAndHeavy(t *testing.T) {
+	s := NewGame("MCC-TEST", RoverSwift)
+	heavy, impossible := false, false
+	for _, c := range s.Contracts {
+		if c.Weight == WeightClassHeavy {
+			heavy = true
+		}
+		if c.Impossible {
+			impossible = true
+		}
+	}
+	if !heavy {
+		t.Fatal("need a heavy contract")
+	}
+	if !impossible {
+		t.Fatal("need one intentionally near-impossible delivery")
 	}
 }
 

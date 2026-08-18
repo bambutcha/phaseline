@@ -53,7 +53,12 @@ func (s *GameState) Predict(path []Axial) Prediction {
 	}
 	if len(path) > 0 {
 		r.State = RoverMoving
-		r.Progress = 0
+		orig := s.R()
+		if orig.State == RoverMoving && orig.Progress > 0 && len(orig.Path) > 0 && orig.Path[0] == path[0] {
+			r.Progress = orig.Progress
+		} else {
+			r.Progress = 0
+		}
 	}
 	for i := range cp.Rovers {
 		if i == cp.Active {

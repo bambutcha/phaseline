@@ -3,21 +3,22 @@ package sim
 import "sort"
 
 type Snapshot struct {
-	Seed            string     `json:"seed"`
-	Status          GameStatus `json:"status"`
-	Outcome         Outcome    `json:"outcome,omitempty"`
-	T               float64    `json:"t"`
+	Seed            string       `json:"seed"`
+	Status          GameStatus   `json:"status"`
+	Outcome         Outcome      `json:"outcome,omitempty"`
+	EndReason       string       `json:"endReason,omitempty"`
+	T               float64      `json:"t"`
 	Rover           RoverView    `json:"rover"`
 	Rovers          []RoverView  `json:"rovers"`
 	ActiveRover     RoverType    `json:"activeRover"`
-	Map             MapView    `json:"map"`
-	Contracts       []Contract `json:"contracts"`
-	Crisis          CrisisView `json:"crisis"`
-	ColonyScore     int        `json:"colonyScore"`
-	EarthScore      int        `json:"earthScore"`
-	AutonomyCharges int         `json:"autonomyCharges"`
-	Events          []Event     `json:"events,omitempty"`
-	RoutePreview    *Prediction `json:"routePreview,omitempty"`
+	Map             MapView      `json:"map"`
+	Contracts       []Contract   `json:"contracts"`
+	Crisis          CrisisView   `json:"crisis"`
+	ColonyScore     int          `json:"colonyScore"`
+	EarthScore      int          `json:"earthScore"`
+	AutonomyCharges int          `json:"autonomyCharges"`
+	Events          []Event      `json:"events,omitempty"`
+	RoutePreview    *Prediction  `json:"routePreview,omitempty"`
 	Ghost           *GhostReplay `json:"ghost,omitempty"`
 	Goal            GoalView     `json:"goal"`
 	Reject          *RejectView  `json:"reject,omitempty"`
@@ -30,22 +31,22 @@ type GoalView struct {
 }
 
 type RoverView struct {
-	Type      RoverType   `json:"type"`
-	Name      string      `json:"name"`
-	Hex       string      `json:"hex"`
-	Q         int         `json:"q"`
-	R         int         `json:"r"`
-	Progress  float64     `json:"progress"`
-	Battery   float64     `json:"battery"`
-	Max       float64     `json:"maxBattery"`
-	State     RoverState  `json:"state"`
-	Cargo     []CargoType `json:"cargo"`
-	Path      []string    `json:"path"`
-	SlotsUsed int         `json:"slotsUsed"`
-	SlotsMax  int         `json:"slotsMax"`
-	CanHeavy  bool        `json:"canHeavy"`
-	Reversing bool        `json:"reversing,omitempty"`
-	ReverseHex string     `json:"reverseHex,omitempty"`
+	Type       RoverType   `json:"type"`
+	Name       string      `json:"name"`
+	Hex        string      `json:"hex"`
+	Q          int         `json:"q"`
+	R          int         `json:"r"`
+	Progress   float64     `json:"progress"`
+	Battery    float64     `json:"battery"`
+	Max        float64     `json:"maxBattery"`
+	State      RoverState  `json:"state"`
+	Cargo      []CargoType `json:"cargo"`
+	Path       []string    `json:"path"`
+	SlotsUsed  int         `json:"slotsUsed"`
+	SlotsMax   int         `json:"slotsMax"`
+	CanHeavy   bool        `json:"canHeavy"`
+	Reversing  bool        `json:"reversing,omitempty"`
+	ReverseHex string      `json:"reverseHex,omitempty"`
 }
 
 type MapView struct {
@@ -91,13 +92,14 @@ func (s *GameState) Snapshot() Snapshot {
 		views = append(views, s.roverView(&s.Rovers[i]))
 	}
 	snap := Snapshot{
-		Seed:    s.Seed,
-		Status:  s.Status,
-		Outcome: s.Outcome,
-		T:       round1(s.T),
-		Rover:   s.roverView(s.R()),
-		Rovers:  views,
-		ActiveRover: s.R().Type,
+		Seed:            s.Seed,
+		Status:          s.Status,
+		Outcome:         s.Outcome,
+		EndReason:       s.EndReason,
+		T:               round1(s.T),
+		Rover:           s.roverView(s.R()),
+		Rovers:          views,
+		ActiveRover:     s.R().Type,
 		Map:             MapView{Hexes: hexes, Terminator: s.Terminator},
 		Contracts:       append([]Contract(nil), s.Contracts...),
 		Crisis:          CrisisView{Kind: s.CrisisKind, FiresAt: s.CrisisAt, Fired: s.CrisisFired},

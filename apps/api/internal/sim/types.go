@@ -124,6 +124,7 @@ type Contract struct {
 	Deadline    float64        `json:"deadline"`
 	Status      ContractStatus `json:"status"`
 	AssignedTo  RoverType      `json:"assignedTo,omitempty"`
+	Impossible  bool           `json:"impossible,omitempty"`
 }
 
 type Event struct {
@@ -155,6 +156,7 @@ type GameState struct {
 	Events       []Event
 	Ghost        *GhostReplay
 	LastReject   *RejectView
+	EndReason    string
 	noChain      bool
 }
 

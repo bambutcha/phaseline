@@ -226,15 +226,28 @@ func (s *GameState) tickBattery(dt float64) {
 func (s *GameState) tickCargo(dt float64) {
 	for i := range s.Contracts {
 		c := &s.Contracts[i]
-		if c.Status == ContractAccepted || c.Status == ContractInTransit {
-			if c.Deadline > 0 {
-				c.Deadline -= dt
-				if c.Deadline <= 0 {
-					c.Deadline = 0
-					c.Status = ContractExpired
-					s.dropCargoOf(c.AssignedTo, c.Cargo)
-					s.emit("contract_failed", map[string]any{"contractId": c.ID, "reason": "expired"})
-				}
+		switch c.Status {
+		case ContractQueued, ContractAccepted, ContractInTransit:
+		default:
+			continue
+		}
+		if c.Deadline > 0 && (c.Status == ContractAccepted || c.Status == ContractInTransit) {
+			c.Deadline -= dt
+			if c.Deadline <= 0 {
+				c.Deadline = 0
+				c.Status = ContractExpired
+				s.dropCargoOf(c.AssignedTo, c.Cargo)
+				s.emit("contract_failed", map[string]any{"contractId": c.ID, "reason": "expired"})
+				continue
+			}
+		}
+		if c.Status == ContractQueued || c.Status == ContractAccepted {
+			ax, err := ParseHexID(c.Pickup)
+			if err == nil && s.InShadow(ax.Q, ax.R) {
+				c.Status = ContractLostShadow
+				s.dropCargoOf(c.AssignedTo, c.Cargo)
+				s.emit("contract_failed", map[string]any{"contractId": c.ID, "reason": "shadow"})
+				continue
 			}
 		}
 		if c.Status == ContractInTransit && c.Cargo == CargoCryo {
@@ -248,12 +261,15 @@ func (s *GameState) tickCargo(dt float64) {
 }
 
 func (s *GameState) roverByType(t RoverType) *Rover {
+	if t == "" {
+		return nil
+	}
 	for i := range s.Rovers {
 		if s.Rovers[i].Type == t {
 			return &s.Rovers[i]
 		}
 	}
-	return s.R()
+	return nil
 }
 
 func (s *GameState) tickCrisis() {
@@ -374,6 +390,9 @@ func (s *GameState) dropCargo(t CargoType) {
 }
 
 func (s *GameState) dropCargoOf(owner RoverType, t CargoType) {
+	if owner == "" {
+		return
+	}
 	rv := s.roverByType(owner)
 	if rv == nil {
 		return
@@ -410,11 +429,11 @@ func (s *GameState) checkEnd() {
 	if s.Status != StatusActive {
 		return
 	}
-	allDone := true
+	allDelivered := len(s.Contracts) > 0
 	for _, c := range s.Contracts {
-		switch c.Status {
-		case ContractQueued, ContractAccepted, ContractInTransit:
-			allDone = false
+		if c.Status != ContractDelivered {
+			allDelivered = false
+			break
 		}
 	}
 	mapDark := true
@@ -425,29 +444,33 @@ func (s *GameState) checkEnd() {
 		}
 	}
 	allStranded := true
-	anyStranded := false
 	for _, r := range s.Rovers {
-		if r.State == RoverStranded {
-			anyStranded = true
-		} else {
+		if r.State != RoverStranded {
 			allStranded = false
+			break
 		}
 	}
 	if len(s.Rovers) == 0 {
 		allStranded = s.R().State == RoverStranded
-		anyStranded = allStranded
 	}
-	_ = anyStranded
-	if allStranded || allDone || mapDark || s.T >= GameDurationTargetSec {
-		s.finish()
+	switch {
+	case allStranded:
+		s.finish("stranded")
+	case mapDark:
+		s.finish("shadow")
+	case allDelivered:
+		s.finish("delivered")
+	case s.T >= GameDurationTargetSec:
+		s.finish("time")
 	}
 }
 
-func (s *GameState) finish() {
+func (s *GameState) finish(reason string) {
 	if s.Status == StatusFinished {
 		return
 	}
 	s.Status = StatusFinished
+	s.EndReason = reason
 	for i := range s.Contracts {
 		c := &s.Contracts[i]
 		switch c.Status {
@@ -467,7 +490,7 @@ func (s *GameState) finish() {
 	default:
 		s.Outcome = OutcomeLost
 	}
-	s.emit("game_over", map[string]any{"outcome": string(s.Outcome)})
+	s.emit("game_over", map[string]any{"outcome": string(s.Outcome), "reason": reason})
 }
 
 func (s *GameState) emitOnce(kind string, payload map[string]any) {
