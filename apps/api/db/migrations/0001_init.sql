@@ -25,7 +25,7 @@ CREATE TABLE contracts (
 CREATE TABLE game_events (
     id BIGSERIAL PRIMARY KEY,
     game_id UUID NOT NULL REFERENCES games (id) ON DELETE CASCADE,
-    t NUMERIC NOT NULL,
+    t DOUBLE PRECISION NOT NULL,
     kind TEXT NOT NULL,
     payload_json JSONB,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()

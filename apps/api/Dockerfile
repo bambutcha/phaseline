@@ -1,8 +1,9 @@
-FROM golang:1.22-alpine AS build
+FROM golang:1.26-alpine AS build
 WORKDIR /src
-COPY go.mod ./
+COPY go.mod go.sum ./
+RUN go mod download
 COPY . .
-RUN go mod tidy && CGO_ENABLED=0 go build -o /out/server ./cmd/server
+RUN CGO_ENABLED=0 go build -o /out/server ./cmd/server
 
 FROM alpine:3.20
 WORKDIR /app

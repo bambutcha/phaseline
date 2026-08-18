@@ -36,8 +36,8 @@ const (
 	ContractAccepted   ContractStatus = "accepted"
 	ContractInTransit  ContractStatus = "in_transit"
 	ContractDelivered  ContractStatus = "delivered"
-	ContractFailed     ContractStatus = "failed"
 	ContractExpired    ContractStatus = "expired"
+	ContractFailed     ContractStatus = "failed"
 	ContractLostShadow ContractStatus = "lost_to_shadow"
 )
 
@@ -49,51 +49,87 @@ const (
 	RoverStranded RoverState = "stranded"
 )
 
+type GameStatus string
+
+const (
+	StatusLobby    GameStatus = "lobby"
+	StatusActive   GameStatus = "active"
+	StatusFinished GameStatus = "finished"
+)
+
+type Outcome string
+
+const (
+	OutcomeNone    Outcome = ""
+	OutcomeSaved   Outcome = "colony_saved"
+	OutcomePyrrhic Outcome = "pyrrhic"
+	OutcomeLost    Outcome = "signal_lost"
+)
+
+const (
+	DirEast = "east"
+	DirWest = "west"
+)
+
 type Hex struct {
-	Q          int
-	R          int
-	Type       HexType
-	Impassable bool
+	Q          int     `json:"q"`
+	R          int     `json:"r"`
+	Type       HexType `json:"type"`
+	Impassable bool    `json:"impassable"`
 }
 
 func (h Hex) ID() string {
 	return HexID(h.Q, h.R)
 }
 
+func (h Hex) Axial() Axial {
+	return Axial{Q: h.Q, R: h.R}
+}
+
 type Terminator struct {
-	Pos       float64
-	Speed     float64
-	Direction string // east, west, ...
+	Pos       float64 `json:"pos"`
+	Speed     float64 `json:"speed"`
+	Direction string  `json:"direction"`
 }
 
 type Rover struct {
-	Type       RoverType
-	Q, R       int
-	Progress   float64
-	Path       []Hex
-	Battery    float64
-	MaxBattery float64
-	Speed      float64
-	IdleDrain  float64
-	State      RoverState
-	Cargo      []CargoType
+	Type       RoverType   `json:"type"`
+	Q, R       int         `json:"q"`
+	Progress   float64     `json:"progress"`
+	Path       []Axial     `json:"-"`
+	Battery    float64     `json:"battery"`
+	MaxBattery float64     `json:"maxBattery"`
+	Speed      float64     `json:"speed"`
+	IdleDrain  float64     `json:"idleDrain"`
+	State      RoverState  `json:"state"`
+	Cargo      []CargoType `json:"cargo"`
+	SunIdle    float64     `json:"-"`
+	PanicLeft  int         `json:"-"`
 }
 
 type Contract struct {
-	ID          string
-	Title       string
-	Cargo       CargoType
-	Weight      Weight
-	Pickup      string
-	Dropoff     string
-	ColonyValue int
-	EarthValue  int
-	Deadline    float64
-	Status      ContractStatus
+	ID          string         `json:"id"`
+	Title       string         `json:"title"`
+	Cargo       CargoType      `json:"cargoType"`
+	Weight      Weight         `json:"weight"`
+	Pickup      string         `json:"pickup"`
+	Dropoff     string         `json:"dropoff"`
+	ColonyValue int            `json:"colonyValue"`
+	EarthValue  int            `json:"earthValue"`
+	Deadline    float64        `json:"deadline"`
+	Status      ContractStatus `json:"status"`
+}
+
+type Event struct {
+	T       float64        `json:"t"`
+	Kind    string         `json:"kind"`
+	Payload map[string]any `json:"payload,omitempty"`
 }
 
 type GameState struct {
 	Seed         string
+	Status       GameStatus
+	Outcome      Outcome
 	T            float64
 	Map          map[string]Hex
 	Terminator   Terminator
@@ -106,4 +142,21 @@ type GameState struct {
 	CrisisFired  bool
 	AutonomyLeft int
 	FreeReroutes int
+	DustStorm    bool
+	FlareActive  bool
+	CommUntil    float64
+	Events       []Event
+}
+
+func (s *GameState) Hex(q, r int) (Hex, bool) {
+	h, ok := s.Map[HexID(q, r)]
+	return h, ok
+}
+
+func (s *GameState) RoverHex() Hex {
+	h, ok := s.Hex(s.Rover.Q, s.Rover.R)
+	if !ok {
+		return Hex{Q: s.Rover.Q, R: s.Rover.R, Type: TypeRegolith}
+	}
+	return h
 }

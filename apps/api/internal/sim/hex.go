@@ -3,11 +3,17 @@ package sim
 import (
 	"fmt"
 	"math"
+	"strconv"
+	"strings"
 )
 
 type Axial struct {
 	Q int
 	R int
+}
+
+func (a Axial) ID() string {
+	return HexID(a.Q, a.R)
 }
 
 var Neighbors = []Axial{
@@ -21,6 +27,22 @@ var Neighbors = []Axial{
 
 func HexID(q, r int) string {
 	return fmt.Sprintf("%d,%d", q, r)
+}
+
+func ParseHexID(id string) (Axial, error) {
+	parts := strings.Split(id, ",")
+	if len(parts) != 2 {
+		return Axial{}, fmt.Errorf("invalid hex id %q", id)
+	}
+	q, err := strconv.Atoi(strings.TrimSpace(parts[0]))
+	if err != nil {
+		return Axial{}, fmt.Errorf("invalid hex id %q", id)
+	}
+	r, err := strconv.Atoi(strings.TrimSpace(parts[1]))
+	if err != nil {
+		return Axial{}, fmt.Errorf("invalid hex id %q", id)
+	}
+	return Axial{Q: q, R: r}, nil
 }
 
 func CubeDistance(a, b Axial) int {

@@ -19,6 +19,8 @@ services:
       DATABASE_URL: postgres://phaseline:phaseline@postgres:5432/phaseline?sslmode=disable
       PORT: "8080"
       LOG_LEVEL: info
+    ports:
+      - "8080:8080"
     depends_on:
       postgres:
         condition: service_healthy

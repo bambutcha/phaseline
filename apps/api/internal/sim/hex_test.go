@@ -1,6 +1,9 @@
 package sim
 
-import "testing"
+import (
+	"math"
+	"testing"
+)
 
 func TestHexToPixelOrigin(t *testing.T) {
 	x, y := HexToPixel(0, 0, 1)
@@ -30,5 +33,16 @@ func TestPixelRoundTrip(t *testing.T) {
 func TestNeighborsCount(t *testing.T) {
 	if len(Neighbors) != 6 {
 		t.Fatalf("want 6 neighbors, got %d", len(Neighbors))
+	}
+}
+
+func TestHexToPixelFixtures(t *testing.T) {
+	x, y := HexToPixel(1, 0, 1)
+	if math.Abs(x-math.Sqrt(3)) > 1e-9 || math.Abs(y) > 1e-9 {
+		t.Fatalf("1,0 -> %v,%v", x, y)
+	}
+	x, y = HexToPixel(0, 1, 1)
+	if math.Abs(x-math.Sqrt(3)/2) > 1e-9 || math.Abs(y-1.5) > 1e-9 {
+		t.Fatalf("0,1 -> %v,%v", x, y)
 	}
 }
