@@ -320,10 +320,10 @@ PWA (manifest + иконки) — nice-to-have, не блокер MVP.
 
 ```yaml
 tick_hz: 10
-game_duration_target_sec: 240
-terminator_speed_hex_per_sec: 0.015
-rover_swift_speed_hex_per_sec: 0.08
-rover_hauler_speed_hex_per_sec: 0.05
+game_duration_target_sec: 120
+terminator_speed_hex_per_sec: 0.028
+rover_swift_speed_hex_per_sec: 0.45
+rover_hauler_speed_hex_per_sec: 0.32
 battery_swift: 100
 battery_hauler: 140
 colony_win_threshold: 100

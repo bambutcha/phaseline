@@ -23,7 +23,7 @@ func (s *GameState) FindPath(from, to Axial) []Axial {
 	open := []item{{at: from, g: 0}}
 
 	heuristic := func(a Axial) float64 {
-		return float64(CubeDistance(a, to)) * minBaseCost() / s.Rover.Speed
+		return float64(CubeDistance(a, to)) * minBaseCost() / s.R().Speed
 	}
 
 	for len(open) > 0 {
@@ -88,14 +88,15 @@ func reconstruct(came map[string]Axial, from, to Axial) []Axial {
 }
 
 func (s *GameState) SetRoute(ids []string) error {
-	if s.Rover.State == RoverStranded || s.Status == StatusFinished {
+	r := s.R()
+	if r.State == RoverStranded || s.Status == StatusFinished {
 		return errGameOver
 	}
 	if len(ids) == 0 {
-		s.Rover.Path = nil
+		r.Path = nil
 		return nil
 	}
-	prev := Axial{Q: s.Rover.Q, R: s.Rover.R}
+	prev := Axial{Q: r.Q, R: r.R}
 	path := make([]Axial, 0, len(ids))
 	for _, id := range ids {
 		ax, err := ParseHexID(id)
@@ -112,44 +113,92 @@ func (s *GameState) SetRoute(ids []string) error {
 		path = append(path, ax)
 		prev = ax
 	}
-	s.Rover.Path = path
+	r.Path = path
 	return nil
 }
 
 func (s *GameState) GoTo(hexID string) error {
-	if s.Rover.State == RoverStranded || s.Status == StatusFinished {
+	r := s.R()
+	if r.State == RoverStranded || s.Status == StatusFinished {
 		return errGameOver
 	}
 	to, err := ParseHexID(hexID)
 	if err != nil {
 		return err
 	}
-	from := Axial{Q: s.Rover.Q, R: s.Rover.R}
+
+	from := Axial{Q: r.Q, R: r.R}
+	keepProgress := 0.0
+	var keep *Axial
+	if r.State == RoverMoving && len(r.Path) > 0 && r.Progress > 0.02 {
+		cur := r.Path[0]
+		keep = &cur
+		keepProgress = r.Progress
+		from = cur
+	}
+
 	if from == to {
-		s.Rover.Path = nil
+		if keep != nil {
+			r.Path = []Axial{*keep}
+			r.Progress = keepProgress
+			return nil
+		}
+		r.Path = nil
+		r.State = RoverIdle
+		r.Progress = 0
 		return nil
 	}
-	path := s.FindPath(from, to)
-	if len(path) == 0 {
+
+	rest := s.FindPath(from, to)
+	if len(rest) == 0 {
+		s.reject("no_path", "")
 		return errInvalidRoute
 	}
-	s.Rover.Path = path
-	return nil
+
+	path := rest
+	if keep != nil {
+		path = append([]Axial{*keep}, rest...)
+	}
+
+	pred := s.Predict(path)
+	if !pred.Feasible {
+		s.reject("battery", "")
+		if keep != nil {
+			return nil
+		}
+		r.Path = path
+		return nil
+	}
+
+	s.LastReject = nil
+	r.Path = path
+	if keep != nil {
+		r.Progress = keepProgress
+		return s.startMoving(false)
+	}
+	return s.startMoving(true)
 }
 
 func (s *GameState) Deploy() error {
-	if s.Status == StatusFinished || s.Rover.State == RoverStranded {
+	return s.startMoving(true)
+}
+
+func (s *GameState) startMoving(resetProgress bool) error {
+	r := s.R()
+	if s.Status == StatusFinished || r.State == RoverStranded {
 		return errGameOver
 	}
-	if len(s.Rover.Path) == 0 {
+	if len(r.Path) == 0 {
 		return errInvalidRoute
 	}
-	s.Rover.State = RoverMoving
-	s.Rover.Progress = 0
+	r.State = RoverMoving
+	if resetProgress {
+		r.Progress = 0
+	}
 	if s.Status == StatusLobby {
 		s.Status = StatusActive
 		s.emit("game_start", nil)
 	}
-	s.emit("deploy", map[string]any{"hexId": HexID(s.Rover.Q, s.Rover.R)})
+	s.emit("deploy", map[string]any{"rover": string(r.Type), "hexId": HexID(r.Q, r.R)})
 	return nil
 }

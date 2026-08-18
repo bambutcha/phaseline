@@ -4,24 +4,27 @@ const (
 	TickHz = 10
 	TickDT = 0.1
 
-	GameDurationTargetSec = 240.0
+	GameDurationTargetSec = 180.0
 	ColonyWinThreshold    = 100
 	EarthPyrrhicBelow     = 40
 	AutonomyCharges       = 3
 	RerouteFreeCount      = 1
-	ContractsPerGame      = 6
+	ContractsPerGame      = 8
 	MaxActiveContracts    = 2
-	MapHexCount           = 12
+	MapHexCount           = 20
+	MapCols               = 5
+	MapRows               = 4
 
-	TerminatorSpeed = 0.015 // hex projection units per second
+	TerminatorSpeed = 0.022
 
-	SwiftSpeed      = 0.08
-	HaulerSpeed     = 0.05
+	SwiftSpeed      = 0.48
+	HaulerSpeed     = 0.34
 	SwiftBattery    = 100.0
 	HaulerBattery   = 140.0
-	SwiftIdleDrain  = 2.0
-	HaulerIdleDrain = 1.5
-	SolarGain       = 8.0
+	SwiftIdleDrain  = 0.7
+	HaulerIdleDrain = 0.5
+	SolarGain       = 10.0
+	BaseRecharge    = 12.0
 
 	WeightLight  = 1.00
 	WeightMedium = 1.15

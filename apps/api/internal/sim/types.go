@@ -116,8 +116,12 @@ type Contract struct {
 	Dropoff     string         `json:"dropoff"`
 	ColonyValue int            `json:"colonyValue"`
 	EarthValue  int            `json:"earthValue"`
+	Reward      int            `json:"reward"`
+	Risk        string         `json:"risk"`
+	Urgency     string         `json:"urgency"`
 	Deadline    float64        `json:"deadline"`
 	Status      ContractStatus `json:"status"`
+	AssignedTo  RoverType      `json:"assignedTo,omitempty"`
 }
 
 type Event struct {
@@ -133,7 +137,8 @@ type GameState struct {
 	T            float64
 	Map          map[string]Hex
 	Terminator   Terminator
-	Rover        Rover
+	Rovers       []Rover
+	Active       int
 	Contracts    []Contract
 	ColonyScore  int
 	EarthScore   int
@@ -146,6 +151,24 @@ type GameState struct {
 	FlareActive  bool
 	CommUntil    float64
 	Events       []Event
+	Ghost        *GhostReplay
+	LastReject   *RejectView
+}
+
+type RejectView struct {
+	Reason     string `json:"reason"`
+	ContractID string `json:"contractId,omitempty"`
+}
+
+func (s *GameState) R() *Rover {
+	if len(s.Rovers) == 0 {
+		s.Rovers = []Rover{NewRover(RoverSwift, 0, 0)}
+		s.Active = 0
+	}
+	if s.Active < 0 || s.Active >= len(s.Rovers) {
+		s.Active = 0
+	}
+	return &s.Rovers[s.Active]
 }
 
 func (s *GameState) Hex(q, r int) (Hex, bool) {
@@ -154,9 +177,19 @@ func (s *GameState) Hex(q, r int) (Hex, bool) {
 }
 
 func (s *GameState) RoverHex() Hex {
-	h, ok := s.Hex(s.Rover.Q, s.Rover.R)
+	r := s.R()
+	h, ok := s.Hex(r.Q, r.R)
 	if !ok {
-		return Hex{Q: s.Rover.Q, R: s.Rover.R, Type: TypeRegolith}
+		return Hex{Q: r.Q, R: r.R, Type: TypeRegolith}
 	}
 	return h
+}
+
+func (s *GameState) SelectRover(t RoverType) {
+	for i := range s.Rovers {
+		if s.Rovers[i].Type == t {
+			s.Active = i
+			return
+		}
+	}
 }

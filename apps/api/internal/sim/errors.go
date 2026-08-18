@@ -20,6 +20,11 @@ func (s *GameState) emit(kind string, payload map[string]any) {
 	s.Events = append(s.Events, Event{T: round1(s.T), Kind: kind, Payload: payload})
 }
 
+func (s *GameState) reject(reason, contractID string) {
+	s.LastReject = &RejectView{Reason: reason, ContractID: contractID}
+	s.emit("rejected", map[string]any{"reason": reason, "contractId": contractID})
+}
+
 func round1(v float64) float64 {
 	return float64(int(v*10+0.5)) / 10
 }

@@ -30,7 +30,9 @@ type createGameRequest struct {
 }
 
 type createGameResponse struct {
-	ID uuid.UUID `json:"id"`
+	ID      uuid.UUID `json:"id"`
+	Verdict string    `json:"verdict,omitempty"`
+	Share   string    `json:"shareUrl,omitempty"`
 	sim.Snapshot
 }
 
@@ -67,6 +69,12 @@ func (s *Server) createGame(c *gin.Context) {
 		rover = sim.RoverHauler
 	}
 	st := sim.NewGame(req.Seed, rover)
+	if ghost, err := s.Query.GetGhostBySeed(c.Request.Context(), st.Seed); err == nil {
+		var gr sim.GhostReplay
+		if json.Unmarshal(ghost.ReplayJson, &gr) == nil && len(gr.Points) > 0 {
+			st.Ghost = &gr
+		}
+	}
 	snap := st.Snapshot()
 	mapJSON, _ := json.Marshal(snap.Map)
 	termJSON, _ := json.Marshal(snap.Map.Terminator)
@@ -77,7 +85,7 @@ func (s *Server) createGame(c *gin.Context) {
 		MapJson:        mapJSON,
 		Crisis:         st.CrisisKind,
 		TerminatorJson: termJSON,
-		RoverType:      string(st.Rover.Type),
+		RoverType:      string(st.R().Type),
 	})
 	if err != nil {
 		writeErr(c, http.StatusInternalServerError, "invalid", err.Error())
@@ -158,7 +166,7 @@ func (s *Server) setRoute(c *gin.Context) {
 		if err := st.SetRoute(req.HexPath); err != nil {
 			return err
 		}
-		pred = st.Predict(append([]sim.Axial(nil), st.Rover.Path...))
+		pred = st.Predict(append([]sim.Axial(nil), st.R().Path...))
 		return nil
 	})
 	if err != nil {
@@ -271,7 +279,7 @@ func (s *Server) gotoHex(c *gin.Context) {
 		if err := st.GoTo(req.Hex); err != nil {
 			return err
 		}
-		pred = st.Predict(append([]sim.Axial(nil), st.Rover.Path...))
+		pred = st.Predict(append([]sim.Axial(nil), st.R().Path...))
 		return nil
 	})
 	if err != nil {
@@ -302,7 +310,12 @@ func (s *Server) blackbox(c *gin.Context) {
 		writeErr(c, http.StatusConflict, "conflict", "game not finished")
 		return
 	}
-	c.JSON(http.StatusOK, createGameResponse{ID: rt.ID, Snapshot: rt.State.Snapshot()})
+	c.JSON(http.StatusOK, createGameResponse{
+		ID:       rt.ID,
+		Snapshot: rt.State.Snapshot(),
+		Verdict:  sim.VerdictText(rt.State.Outcome, rt.State.Seed),
+		Share:    "/?seed=" + rt.State.Seed,
+	})
 }
 
 func (s *Server) persistFinish(id uuid.UUID, st *sim.GameState) {
@@ -330,6 +343,17 @@ func (s *Server) persistFinish(id uuid.UUID, st *sim.GameState) {
 			slog.Error("persist event", "err", err)
 			return
 		}
+	}
+	replay := sim.BuildGhostReplay(st)
+	replayJSON, _ := json.Marshal(replay)
+	if _, err := s.Query.UpsertGhost(ctx, db.UpsertGhostParams{
+		Seed:        st.Seed,
+		GameID:      id,
+		ColonyScore: int32(st.ColonyScore),
+		EarthScore:  int32(st.EarthScore),
+		ReplayJson:  replayJSON,
+	}); err != nil {
+		slog.Error("persist ghost", "err", err)
 	}
 }
 

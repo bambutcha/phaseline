@@ -24,6 +24,7 @@ type wsIn struct {
 	ContractID string   `json:"contractId"`
 	HexPath    []string `json:"hexPath"`
 	HexID      string   `json:"hexId"`
+	Rover      string   `json:"rover"`
 }
 
 func (s *Server) wsGame(c *gin.Context) {
@@ -100,6 +101,8 @@ func applyIntent(st *sim.GameState, msg wsIn) error {
 	switch msg.Type {
 	case "accept_contract":
 		return st.Accept(msg.ContractID)
+	case "dispatch":
+		return st.Dispatch(msg.ContractID)
 	case "set_route":
 		return st.SetRoute(msg.HexPath)
 	case "goto":
@@ -110,6 +113,13 @@ func applyIntent(st *sim.GameState, msg wsIn) error {
 		return st.Reroute(msg.HexPath)
 	case "autonomy":
 		_, _ = st.Autonomy()
+		return nil
+	case "select_rover":
+		if msg.Rover == string(sim.RoverHauler) {
+			st.SelectRover(sim.RoverHauler)
+		} else {
+			st.SelectRover(sim.RoverSwift)
+		}
 		return nil
 	default:
 		return sim.ErrInvalid

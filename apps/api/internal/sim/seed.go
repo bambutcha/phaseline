@@ -93,16 +93,16 @@ func NewGame(seed string, rover RoverType) *GameState {
 
 	hexes := make(map[string]Hex, MapHexCount)
 	var ids []string
-	for r := 0; r < 3; r++ {
-		for q := 0; q < 4; q++ {
+	for r := 0; r < MapRows; r++ {
+		for q := 0; q < MapCols; q++ {
 			h := Hex{Q: q, R: r, Type: rollTerrain(rng)}
 			hexes[h.ID()] = h
 			ids = append(ids, h.ID())
 		}
 	}
 
-	westBase := Hex{Q: 0, R: 1, Type: TypeBase}
-	eastBase := Hex{Q: 3, R: 1, Type: TypeBase}
+	westBase := Hex{Q: 0, R: MapRows / 2, Type: TypeBase}
+	eastBase := Hex{Q: MapCols - 1, R: MapRows / 2, Type: TypeBase}
 	hexes[westBase.ID()] = westBase
 	hexes[eastBase.ID()] = eastBase
 
@@ -113,7 +113,7 @@ func NewGame(seed string, rover RoverType) *GameState {
 
 	term := Terminator{Speed: TerminatorSpeed, Direction: dir}
 	if dir == DirWest {
-		term.Pos = 3.5
+		term.Pos = float64(MapCols) - 0.5
 	} else {
 		term.Pos = -0.5
 	}
@@ -122,12 +122,20 @@ func NewGame(seed string, rover RoverType) *GameState {
 	jitter := rng.Float64()*20 - 10
 	crisisAt := 0.4*GameDurationTargetSec + jitter
 
+	swift := NewRover(RoverSwift, start.Q, start.R)
+	hauler := NewRover(RoverHauler, start.Q, start.R)
+	active := 0
+	if rover == RoverHauler {
+		active = 1
+	}
+
 	g := &GameState{
 		Seed:         seed,
 		Status:       StatusLobby,
 		Map:          hexes,
 		Terminator:   term,
-		Rover:        NewRover(rover, start.Q, start.R),
+		Rovers:       []Rover{swift, hauler},
+		Active:       active,
 		CrisisKind:   crisis,
 		CrisisAt:     crisisAt,
 		AutonomyLeft: AutonomyCharges,
@@ -174,9 +182,17 @@ func (s *GameState) rollContracts(rng *rand.Rand, westBase, eastBase string, ids
 				drop = westBase
 			}
 		}
+		ph := s.Map[pick]
+		risk := hexRisk(ph)
+		urgency := "low"
 		deadline := spec.deadline
 		if spec.cargo == CargoMedSeeds {
 			deadline = 80 + rng.Float64()*40
+		}
+		if deadline > 0 {
+			urgency = "high"
+		} else if risk == "high" {
+			urgency = "medium"
 		}
 		out = append(out, Contract{
 			ID:          fmt.Sprintf("c%d", i),
@@ -187,6 +203,9 @@ func (s *GameState) rollContracts(rng *rand.Rand, westBase, eastBase string, ids
 			Dropoff:     drop,
 			ColonyValue: spec.colony,
 			EarthValue:  spec.earth,
+			Reward:      spec.colony + spec.earth,
+			Risk:        risk,
+			Urgency:     urgency,
 			Deadline:    deadline,
 			Status:      ContractQueued,
 		})

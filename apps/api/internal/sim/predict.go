@@ -17,14 +17,27 @@ func (s *GameState) Clone() *GameState {
 	if s.Contracts != nil {
 		cp.Contracts = append([]Contract(nil), s.Contracts...)
 	}
-	if s.Rover.Path != nil {
-		cp.Rover.Path = append([]Axial(nil), s.Rover.Path...)
-	}
-	if s.Rover.Cargo != nil {
-		cp.Rover.Cargo = append([]CargoType(nil), s.Rover.Cargo...)
+	if s.Rovers != nil {
+		cp.Rovers = append([]Rover(nil), s.Rovers...)
+		for i := range cp.Rovers {
+			if s.Rovers[i].Path != nil {
+				cp.Rovers[i].Path = append([]Axial(nil), s.Rovers[i].Path...)
+			}
+			if s.Rovers[i].Cargo != nil {
+				cp.Rovers[i].Cargo = append([]CargoType(nil), s.Rovers[i].Cargo...)
+			}
+		}
 	}
 	if s.Events != nil {
 		cp.Events = append([]Event(nil), s.Events...)
+	}
+	if s.Ghost != nil {
+		g := *s.Ghost
+		cp.Ghost = &g
+	}
+	if s.LastReject != nil {
+		r := *s.LastReject
+		cp.LastReject = &r
 	}
 	return &cp
 }
@@ -32,51 +45,55 @@ func (s *GameState) Clone() *GameState {
 func (s *GameState) Predict(path []Axial) Prediction {
 	cp := s.Clone()
 	cp.Events = nil
-	cp.Rover.Path = append([]Axial(nil), path...)
+	r := cp.R()
+	r.Path = append([]Axial(nil), path...)
 	if cp.Status != StatusActive {
 		cp.Status = StatusActive
 	}
 	if len(path) > 0 {
-		cp.Rover.State = RoverMoving
-		cp.Rover.Progress = 0
+		r.State = RoverMoving
+		r.Progress = 0
+	}
+	for i := range cp.Rovers {
+		if i == cp.Active {
+			continue
+		}
+		cp.Rovers[i].State = RoverIdle
+		cp.Rovers[i].Path = nil
 	}
 	pred := Prediction{
-		EndBattery: cp.Rover.Battery,
-		MinBattery: cp.Rover.Battery,
+		EndBattery: r.Battery,
+		MinBattery: r.Battery,
 		Feasible:   true,
 	}
 	startT := cp.T
 	for i := 0; i < 10000; i++ {
 		cp.Tick(TickDT)
-		if cp.Rover.Battery < pred.MinBattery {
-			pred.MinBattery = cp.Rover.Battery
+		cur := cp.R()
+		if cur.Battery < pred.MinBattery {
+			pred.MinBattery = cur.Battery
 		}
-		if cp.Rover.State != RoverMoving || len(cp.Rover.Path) == 0 {
+		if cur.State != RoverMoving || len(cur.Path) == 0 {
 			break
 		}
-		if cp.Rover.State == RoverStranded {
+		if cur.State == RoverStranded {
 			break
 		}
 	}
 	pred.ETASec = cp.T - startT
-	pred.EndBattery = cp.Rover.Battery
-	pred.Feasible = pred.MinBattery > 0 && cp.Rover.State != RoverStranded
+	pred.EndBattery = cp.R().Battery
+	pred.Feasible = pred.MinBattery > 0 && cp.R().State != RoverStranded
 	seen := map[string]bool{}
-	at := Axial{Q: s.Rover.Q, R: s.Rover.R}
 	t := s.Terminator
-	elapsed := 0.0
 	for _, step := range path {
 		hex := s.Map[step.ID()]
 		cost := s.moveCostAt(hex, s.WeightMod(), t.InShadow(hex.Q))
 		edge := cost / s.roverSpeed()
-		elapsed += edge
 		t = t.Advance(edge)
 		if t.InShadow(step.Q) && !seen[step.ID()] {
 			pred.InShadowAt = append(pred.InShadowAt, step.ID())
 			seen[step.ID()] = true
 		}
-		at = step
 	}
-	_ = at
 	return pred
 }

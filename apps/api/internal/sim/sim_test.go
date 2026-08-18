@@ -29,15 +29,15 @@ func TestNoShadowAtStart(t *testing.T) {
 func TestShadowDrainsBattery(t *testing.T) {
 	s := NewGame("MCC-TEST", RoverSwift)
 	s.Status = StatusActive
-	s.Rover.Battery = 50
+	s.R().Battery = 50
 	s.Terminator.Direction = DirEast
-	s.Terminator.Pos = float64(s.Rover.Q) + 1 // center already passed
-	if !s.InShadow(s.Rover.Q, s.Rover.R) {
+	s.Terminator.Pos = float64(s.R().Q) + 1 // center already passed
+	if !s.InShadow(s.R().Q, s.R().R) {
 		t.Fatal("expected rover in shadow")
 	}
 	s.Tick(1.0)
-	if s.Rover.Battery >= 50 {
-		t.Fatalf("battery=%v, should drain", s.Rover.Battery)
+	if s.R().Battery >= 50 {
+		t.Fatalf("battery=%v, should drain", s.R().Battery)
 	}
 }
 
@@ -61,7 +61,7 @@ func TestPathfindingAvoidsImpassable(t *testing.T) {
 			"1,-1": {Q: 1, R: -1, Type: TypeRegolith},
 			"2,-1": {Q: 2, R: -1, Type: TypeRegolith},
 		},
-		Rover:      NewRover(RoverSwift, 0, 0),
+		Rovers:     []Rover{NewRover(RoverSwift, 0, 0)},
 		Terminator: Terminator{Pos: -10, Speed: TerminatorSpeed, Direction: DirEast},
 	}
 	path := s.FindPath(Axial{0, 0}, Axial{2, 0})
@@ -126,9 +126,9 @@ func TestDifferentSeedsDiffer(t *testing.T) {
 func TestBatteryZeroStrandsWhenMoving(t *testing.T) {
 	s := NewGame("MCC-TEST", RoverSwift)
 	s.Status = StatusActive
-	s.Rover.Battery = 0.01
-	s.Rover.State = RoverMoving
-	from := Axial{Q: s.Rover.Q, R: s.Rover.R}
+	s.R().Battery = 0.01
+	s.R().State = RoverMoving
+	from := Axial{Q: s.R().Q, R: s.R().R}
 	var path []Axial
 	for _, d := range Neighbors {
 		nb := Axial{Q: from.Q + d.Q, R: from.R + d.R}
@@ -140,19 +140,19 @@ func TestBatteryZeroStrandsWhenMoving(t *testing.T) {
 	if len(path) == 0 {
 		t.Fatal("need a neighbor path")
 	}
-	s.Rover.Path = path
+	s.R().Path = path
 	for i := 0; i < 80; i++ {
 		s.Tick(TickDT)
-		if s.Rover.State == RoverStranded {
+		if s.R().State == RoverStranded {
 			return
 		}
 	}
-	t.Fatalf("state=%s battery=%v", s.Rover.State, s.Rover.Battery)
+	t.Fatalf("state=%s battery=%v", s.R().State, s.R().Battery)
 }
 
 func TestPredictMatchesMoveCost(t *testing.T) {
 	s := NewGame("MCC-TEST", RoverSwift)
-	from := Axial{Q: s.Rover.Q, R: s.Rover.R}
+	from := Axial{Q: s.R().Q, R: s.R().R}
 	var to Axial
 	found := false
 	for _, d := range Neighbors {
@@ -173,14 +173,14 @@ func TestPredictMatchesMoveCost(t *testing.T) {
 	}
 	hex := s.Map[to.ID()]
 	cost := s.MoveCost(hex)
-	if pred.EndBattery >= s.Rover.Battery {
-		t.Fatalf("expected drain, start=%v end=%v cost=%v", s.Rover.Battery, pred.EndBattery, cost)
+	if pred.EndBattery >= s.R().Battery {
+		t.Fatalf("expected drain, start=%v end=%v cost=%v", s.R().Battery, pred.EndBattery, cost)
 	}
 }
 
 func TestGoToFindsPath(t *testing.T) {
 	s := NewGame("MCC-TEST", RoverSwift)
-	from := Axial{Q: s.Rover.Q, R: s.Rover.R}
+	from := Axial{Q: s.R().Q, R: s.R().R}
 	var to Axial
 	okDest := false
 	for _, h := range s.Map {
@@ -197,10 +197,10 @@ func TestGoToFindsPath(t *testing.T) {
 	if err := s.GoTo(to.ID()); err != nil {
 		t.Fatal(err)
 	}
-	if len(s.Rover.Path) == 0 {
+	if len(s.R().Path) == 0 {
 		t.Fatal("empty path")
 	}
-	if s.Rover.Path[len(s.Rover.Path)-1] != to {
-		t.Fatalf("end=%v want %v", s.Rover.Path[len(s.Rover.Path)-1], to)
+	if s.R().Path[len(s.R().Path)-1] != to {
+		t.Fatalf("end=%v want %v", s.R().Path[len(s.R().Path)-1], to)
 	}
 }

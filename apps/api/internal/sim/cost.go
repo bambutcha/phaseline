@@ -3,9 +3,13 @@ package sim
 import "math"
 
 func (s *GameState) WeightMod() float64 {
+	r := s.R()
 	hasHeavy, hasMedium := false, false
 	for _, c := range s.Contracts {
 		if c.Status != ContractAccepted && c.Status != ContractInTransit {
+			continue
+		}
+		if c.AssignedTo != "" && c.AssignedTo != r.Type {
 			continue
 		}
 		switch c.Weight {
@@ -50,12 +54,13 @@ func (s *GameState) moveCostAt(hex Hex, weightMod float64, inShadow bool) float6
 	if hex.Impassable {
 		return math.Inf(1)
 	}
-	return BaseMoveCost(hex.Type) * weightMod * terrainMod(s.Rover.Type, hex.Type) * shadowMod(inShadow)
+	return BaseMoveCost(hex.Type) * weightMod * terrainMod(s.R().Type, hex.Type) * shadowMod(inShadow)
 }
 
 func (s *GameState) roverSpeed() float64 {
-	sp := s.Rover.Speed
-	if s.Rover.PanicLeft > 0 {
+	r := s.R()
+	sp := r.Speed
+	if r.PanicLeft > 0 {
 		return sp * 0.7
 	}
 	return sp

@@ -11,54 +11,59 @@ func (s *GameState) Tick(dt float64) []Event {
 	}
 	start := len(s.Events)
 	s.T += dt
-
 	s.Terminator = s.Terminator.Advance(dt)
 
-	if s.Rover.State == RoverMoving {
-		s.tickMove(dt)
+	sel := s.Active
+	for i := range s.Rovers {
+		s.Active = i
+		s.tickRover(dt)
 	}
+	s.Active = sel
 
-	s.tickBattery(dt)
 	s.tickCargo(dt)
 	s.tickCrisis()
 	s.checkEnd()
-
-	if s.Rover.Battery <= 0 {
-		s.Rover.Battery = 0
-		if s.Rover.State == RoverMoving || s.Rover.State == RoverIdle {
-			if s.Rover.State == RoverMoving {
-				s.failCarried(ContractFailed)
-				s.Rover.State = RoverStranded
-				s.Rover.Path = nil
-				s.emit("stranded", map[string]any{"hexId": HexID(s.Rover.Q, s.Rover.R)})
-			}
-		}
-	}
-
-	if s.Rover.Battery <= s.Rover.MaxBattery*0.2 && s.Rover.Battery > 0 {
-		s.emitOnce("battery_low", map[string]any{"battery": s.Rover.Battery})
-	}
-
 	return s.Events[start:]
 }
 
+func (s *GameState) tickRover(dt float64) {
+	r := s.R()
+	if r.State == RoverMoving {
+		s.tickMove(dt)
+	}
+	s.tickBattery(dt)
+	if r.Battery <= 0 {
+		r.Battery = 0
+		if r.State == RoverMoving {
+			s.failCarried(ContractFailed)
+			r.State = RoverStranded
+			r.Path = nil
+			s.emit("stranded", map[string]any{"rover": string(r.Type), "hexId": HexID(r.Q, r.R)})
+		}
+	}
+	if r.Battery <= r.MaxBattery*0.2 && r.Battery > 0 {
+		s.emitOnce("battery_low_"+string(r.Type), map[string]any{"rover": string(r.Type), "battery": r.Battery})
+	}
+}
+
 func (s *GameState) tickMove(dt float64) {
-	if len(s.Rover.Path) == 0 {
-		s.Rover.State = RoverIdle
-		s.Rover.Progress = 0
+	r := s.R()
+	if len(r.Path) == 0 {
+		r.State = RoverIdle
+		r.Progress = 0
 		return
 	}
-	next := s.Rover.Path[0]
+	next := r.Path[0]
 	hex, ok := s.Map[next.ID()]
 	if !ok || hex.Impassable {
-		s.Rover.State = RoverIdle
-		s.Rover.Path = nil
-		s.Rover.Progress = 0
+		r.State = RoverIdle
+		r.Path = nil
+		r.Progress = 0
 		return
 	}
 	cost := s.MoveCost(hex)
 	if math.IsInf(cost, 1) {
-		s.Rover.State = RoverIdle
+		r.State = RoverIdle
 		return
 	}
 	speed := s.roverSpeed()
@@ -66,68 +71,76 @@ func (s *GameState) tickMove(dt float64) {
 	if edgeTime <= 0 {
 		edgeTime = TickDT
 	}
-	s.Rover.Progress += dt / edgeTime
-	if s.Rover.Progress < 1 {
+	r.Progress += dt / edgeTime
+	if r.Progress < 1 {
 		return
 	}
 
-	prevShadow := s.InShadow(s.Rover.Q, s.Rover.R)
-	s.Rover.Battery -= cost
-	s.Rover.Q, s.Rover.R = next.Q, next.R
-	s.Rover.Path = s.Rover.Path[1:]
-	s.Rover.Progress = 0
-	s.Rover.SunIdle = 0
-	if s.Rover.PanicLeft > 0 {
-		s.Rover.PanicLeft--
+	prevShadow := s.InShadow(r.Q, r.R)
+	r.Battery -= cost
+	if r.Battery <= 0 {
+		r.Battery = 0
+		r.Q, r.R = next.Q, next.R
+		r.Path = nil
+		r.Progress = 0
+		s.failCarried(ContractFailed)
+		r.State = RoverStranded
+		s.emit("stranded", map[string]any{"rover": string(r.Type), "hexId": HexID(r.Q, r.R)})
+		return
 	}
-	s.emit("hex_entered", map[string]any{"hexId": next.ID()})
+	r.Q, r.R = next.Q, next.R
+	r.Path = r.Path[1:]
+	r.Progress = 0
+	r.SunIdle = 0
+	if r.PanicLeft > 0 {
+		r.PanicLeft--
+	}
+	s.emit("hex_entered", map[string]any{"rover": string(r.Type), "hexId": next.ID()})
 
-	nowShadow := s.InShadow(s.Rover.Q, s.Rover.R)
+	nowShadow := s.InShadow(r.Q, r.R)
 	if nowShadow && !prevShadow {
 		s.emit("entered_shadow", map[string]any{"hexId": next.ID()})
 	}
-	if !nowShadow && prevShadow {
-		s.emit("left_shadow", map[string]any{"hexId": next.ID()})
-	}
-
 	if hex.Type == TypeCrater || hex.Type == TypeRidge {
 		if s.hasCargo(CargoCrew) {
-			s.Rover.PanicLeft = 1
+			r.PanicLeft = 1
 		}
 	}
-
 	s.tryPickupDrop()
-
-	if len(s.Rover.Path) == 0 {
-		s.Rover.State = RoverIdle
+	if len(r.Path) == 0 {
+		r.State = RoverIdle
 	}
-	if s.Rover.Battery <= 0 {
-		s.Rover.Battery = 0
+	if r.Battery <= 0 {
+		r.Battery = 0
 	}
 }
 
 func (s *GameState) tickBattery(dt float64) {
+	r := s.R()
 	here := s.RoverHex()
-	inShadow := s.InShadow(s.Rover.Q, s.Rover.R)
-	drain := s.Rover.IdleDrain * dt
+	inShadow := s.InShadow(r.Q, r.R)
+	drain := r.IdleDrain * dt
 	if inShadow {
 		drain *= 2
 		if s.hasCargo(CargoO2) {
 			drain *= 2
 		}
 	}
-	s.Rover.Battery -= drain
+	r.Battery -= drain
 
 	if !inShadow && here.Type == TypeSolarPlateau && !s.FlareActive {
-		s.Rover.Battery += SolarGain * dt
+		r.Battery += SolarGain * dt
 	}
-	if s.Rover.Battery > s.Rover.MaxBattery {
-		s.Rover.Battery = s.Rover.MaxBattery
+	if r.State == RoverIdle && !inShadow && here.Type == TypeBase {
+		r.Battery += BaseRecharge * dt
 	}
-	if s.Rover.State == RoverIdle && !inShadow {
-		s.Rover.SunIdle += dt
+	if r.Battery > r.MaxBattery {
+		r.Battery = r.MaxBattery
+	}
+	if r.State == RoverIdle && !inShadow {
+		r.SunIdle += dt
 	} else if inShadow {
-		s.Rover.SunIdle = 0
+		r.SunIdle = 0
 	}
 }
 
@@ -140,17 +153,28 @@ func (s *GameState) tickCargo(dt float64) {
 				if c.Deadline <= 0 {
 					c.Deadline = 0
 					c.Status = ContractExpired
-					s.dropCargo(c.Cargo)
+					s.dropCargoOf(c.AssignedTo, c.Cargo)
 					s.emit("contract_failed", map[string]any{"contractId": c.ID, "reason": "expired"})
 				}
 			}
 		}
-		if c.Status == ContractInTransit && c.Cargo == CargoCryo && s.Rover.SunIdle >= 1 {
-			c.Status = ContractFailed
-			s.dropCargo(CargoCryo)
-			s.emit("contract_failed", map[string]any{"contractId": c.ID, "reason": "spoil"})
+		if c.Status == ContractInTransit && c.Cargo == CargoCryo {
+			if rv := s.roverByType(c.AssignedTo); rv != nil && rv.SunIdle >= 1 {
+				c.Status = ContractFailed
+				s.dropCargoOf(c.AssignedTo, CargoCryo)
+				s.emit("contract_failed", map[string]any{"contractId": c.ID, "reason": "spoil"})
+			}
 		}
 	}
+}
+
+func (s *GameState) roverByType(t RoverType) *Rover {
+	for i := range s.Rovers {
+		if s.Rovers[i].Type == t {
+			return &s.Rovers[i]
+		}
+	}
+	return s.R()
 }
 
 func (s *GameState) tickCrisis() {
@@ -182,10 +206,13 @@ func (s *GameState) caveIn() {
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
-	roverID := HexID(s.Rover.Q, s.Rover.R)
+	busy := map[string]bool{}
+	for _, r := range s.Rovers {
+		busy[HexID(r.Q, r.R)] = true
+	}
 	for _, id := range ids {
 		h := s.Map[id]
-		if h.Type == TypeCrater && !h.Impassable && id != roverID {
+		if h.Type == TypeCrater && !h.Impassable && !busy[id] {
 			h.Impassable = true
 			s.Map[id] = h
 			return
@@ -194,8 +221,9 @@ func (s *GameState) caveIn() {
 }
 
 func (s *GameState) addVIP() {
-	drop := HexID(s.Rover.Q, s.Rover.R)
-	ids := make([]string, 0, len(s.Map))
+	r := s.R()
+	drop := HexID(r.Q, r.R)
+	ids := make([]string, 0)
 	for id, h := range s.Map {
 		if h.Type == TypeBase {
 			ids = append(ids, id)
@@ -210,22 +238,31 @@ func (s *GameState) addVIP() {
 		Title:       "VIP Override — срочный груз",
 		Cargo:       CargoMedSeeds,
 		Weight:      WeightClassLight,
-		Pickup:      HexID(s.Rover.Q, s.Rover.R),
+		Pickup:      HexID(r.Q, r.R),
 		Dropoff:     drop,
 		ColonyValue: 40,
 		EarthValue:  10,
+		Reward:      50,
+		Risk:        "high",
+		Urgency:     "high",
 		Deadline:    45,
 		Status:      ContractQueued,
 	})
 }
 
 func (s *GameState) tryPickupDrop() {
-	here := HexID(s.Rover.Q, s.Rover.R)
+	r := s.R()
+	here := HexID(r.Q, r.R)
 	for i := range s.Contracts {
 		c := &s.Contracts[i]
+		if c.AssignedTo != "" && c.AssignedTo != r.Type {
+			continue
+		}
 		if c.Status == ContractAccepted && c.Pickup == here {
 			c.Status = ContractInTransit
-			s.Rover.Cargo = append(s.Rover.Cargo, c.Cargo)
+			c.AssignedTo = r.Type
+			r.Cargo = append(r.Cargo, c.Cargo)
+			s.emit("pickup", map[string]any{"contractId": c.ID, "rover": string(r.Type)})
 		}
 		if c.Status == ContractInTransit && c.Dropoff == here {
 			c.Status = ContractDelivered
@@ -236,13 +273,16 @@ func (s *GameState) tryPickupDrop() {
 			}
 			s.ColonyScore += c.ColonyValue + bonus
 			s.EarthScore += c.EarthValue
-			s.emit("deliver", map[string]any{"contractId": c.ID, "hexId": here})
+			s.emit("deliver", map[string]any{
+				"contractId": c.ID, "hexId": here, "rover": string(r.Type),
+				"colony": c.ColonyValue + bonus, "earth": c.EarthValue,
+			})
 		}
 	}
 }
 
 func (s *GameState) hasCargo(t CargoType) bool {
-	for _, c := range s.Rover.Cargo {
+	for _, c := range s.R().Cargo {
 		if c == t {
 			return true
 		}
@@ -251,20 +291,32 @@ func (s *GameState) hasCargo(t CargoType) bool {
 }
 
 func (s *GameState) dropCargo(t CargoType) {
-	out := s.Rover.Cargo[:0]
-	for _, c := range s.Rover.Cargo {
+	s.dropCargoOf(s.R().Type, t)
+}
+
+func (s *GameState) dropCargoOf(owner RoverType, t CargoType) {
+	rv := s.roverByType(owner)
+	if rv == nil {
+		return
+	}
+	out := rv.Cargo[:0]
+	for _, c := range rv.Cargo {
 		if c != t {
 			out = append(out, c)
 		}
 	}
-	s.Rover.Cargo = out
+	rv.Cargo = out
 }
 
 func (s *GameState) failCarried(st ContractStatus) {
+	r := s.R()
 	for i := range s.Contracts {
 		c := &s.Contracts[i]
+		if c.AssignedTo != "" && c.AssignedTo != r.Type {
+			continue
+		}
 		if c.Status == ContractInTransit || c.Status == ContractAccepted {
-			if st == ContractFailed && s.InShadow(s.Rover.Q, s.Rover.R) {
+			if st == ContractFailed && s.InShadow(r.Q, r.R) {
 				c.Status = ContractLostShadow
 			} else {
 				c.Status = st
@@ -272,7 +324,7 @@ func (s *GameState) failCarried(st ContractStatus) {
 			s.emit("contract_failed", map[string]any{"contractId": c.ID})
 		}
 	}
-	s.Rover.Cargo = nil
+	r.Cargo = nil
 }
 
 func (s *GameState) checkEnd() {
@@ -293,7 +345,21 @@ func (s *GameState) checkEnd() {
 			break
 		}
 	}
-	if s.Rover.State == RoverStranded || allDone || mapDark || s.T >= GameDurationTargetSec {
+	allStranded := true
+	anyStranded := false
+	for _, r := range s.Rovers {
+		if r.State == RoverStranded {
+			anyStranded = true
+		} else {
+			allStranded = false
+		}
+	}
+	if len(s.Rovers) == 0 {
+		allStranded = s.R().State == RoverStranded
+		anyStranded = allStranded
+	}
+	_ = anyStranded
+	if allStranded || allDone || mapDark || s.T >= GameDurationTargetSec {
 		s.finish()
 	}
 }
@@ -307,7 +373,7 @@ func (s *GameState) finish() {
 		c := &s.Contracts[i]
 		switch c.Status {
 		case ContractQueued, ContractAccepted, ContractInTransit:
-			if s.Terminator.InShadow(s.Rover.Q) {
+			if s.Terminator.InShadow(s.R().Q) {
 				c.Status = ContractLostShadow
 			} else {
 				c.Status = ContractFailed
