@@ -1,0 +1,33 @@
+# Go
+apps/api/bin/
+apps/api/tmp/
+apps/api/coverage.out
+apps/api/sqlc/*.go.bak
+*.exe
+*.test
+
+# Node / Next
+apps/web/node_modules/
+apps/web/.next/
+apps/web/out/
+apps/web/dist/
+apps/web/coverage/
+
+# Env / secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log
+
+# Docker
+pgdata/
+
+# Generated (keep sqlc output in git once generated)
+# apps/api/internal/db/ is committed after sqlc generate
