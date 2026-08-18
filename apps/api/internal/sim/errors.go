@@ -9,6 +9,8 @@ var (
 	errNotFound     = errors.New("not_found")
 )
 
+var ErrInvalid = errInvalidRoute
+
 func IsGameOver(err error) bool { return errors.Is(err, errGameOver) }
 func IsInvalid(err error) bool  { return errors.Is(err, errInvalidRoute) }
 func IsConflict(err error) bool { return errors.Is(err, errConflict) }

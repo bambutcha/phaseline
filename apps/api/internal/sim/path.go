@@ -116,6 +116,27 @@ func (s *GameState) SetRoute(ids []string) error {
 	return nil
 }
 
+func (s *GameState) GoTo(hexID string) error {
+	if s.Rover.State == RoverStranded || s.Status == StatusFinished {
+		return errGameOver
+	}
+	to, err := ParseHexID(hexID)
+	if err != nil {
+		return err
+	}
+	from := Axial{Q: s.Rover.Q, R: s.Rover.R}
+	if from == to {
+		s.Rover.Path = nil
+		return nil
+	}
+	path := s.FindPath(from, to)
+	if len(path) == 0 {
+		return errInvalidRoute
+	}
+	s.Rover.Path = path
+	return nil
+}
+
 func (s *GameState) Deploy() error {
 	if s.Status == StatusFinished || s.Rover.State == RoverStranded {
 		return errGameOver

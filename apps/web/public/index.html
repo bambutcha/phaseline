@@ -2,7 +2,7 @@
 <html lang="ru">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>PHASELINE</title>
     <style>
       :root {
@@ -12,43 +12,390 @@
         --cold: #2e86ab;
         --fg: #e8e8e8;
       }
-      html,
-      body {
+      * { box-sizing: border-box; }
+      html, body {
         margin: 0;
-        min-height: 100%;
+        height: 100%;
         font-family: ui-sans-serif, system-ui, sans-serif;
-        background: radial-gradient(1200px 600px at 50% -10%, #1a2430 0%, var(--bg) 55%);
+        background: var(--bg);
         color: var(--fg);
       }
-      main {
-        max-width: 40rem;
-        margin: 0 auto;
-        padding: 3rem 1.25rem;
+      header {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 10px 12px;
+        font-size: 13px;
+        letter-spacing: 0.04em;
       }
-      h1 {
-        letter-spacing: 0.28em;
-        font-weight: 600;
-        font-size: 1.4rem;
-        color: var(--gold);
+      header strong { color: var(--gold); }
+      #map {
+        width: 100%;
+        height: 58vh;
+        min-height: 280px;
+        display: block;
+        touch-action: manipulation;
+        background: radial-gradient(ellipse 120% 80% at 50% 0%, #1a2430 0%, #0b0f14 70%);
       }
-      p {
-        line-height: 1.55;
-        color: #c5c9ce;
+      .contracts {
+        display: flex;
+        gap: 8px;
+        overflow-x: auto;
+        padding: 8px 12px;
+        -webkit-overflow-scrolling: touch;
       }
-      code {
-        color: var(--cold);
+      .card {
+        min-width: 160px;
+        padding: 8px 10px;
+        border: 1px solid #2a333c;
+        border-radius: 10px;
+        background: #12181f;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .card.active { border-color: var(--gold); box-shadow: 0 0 12px rgba(201, 162, 39, 0.25); }
+      .bar {
+        display: flex;
+        gap: 8px;
+        padding: 10px 12px calc(12px + env(safe-area-inset-bottom));
+      }
+      button {
+        flex: 1;
+        min-height: 44px;
+        border: 0;
+        border-radius: 10px;
+        background: var(--gold);
+        color: #111;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        cursor: pointer;
+      }
+      button.ghost {
+        background: #1c242d;
+        color: var(--fg);
+      }
+      #log {
+        height: 56px;
+        overflow: auto;
+        padding: 0 12px 6px;
+        font-size: 11px;
+        color: #9aa3ab;
       }
     </style>
   </head>
   <body>
-    <main>
-      <h1>PHASELINE</h1>
-      <p>Deliver before the line.</p>
-      <p>
-        Каркас репозитория готов. Игра ещё не собрана — это заглушка до
-        <code>docs/DEVELOPMENT.md</code>, фаза 0–4.
-      </p>
-      <p>API: <code>/health</code></p>
-    </main>
+    <header>
+      <div><strong>PHASELINE</strong> <span id="seed"></span></div>
+      <div>T <span id="t">0</span>s · ⚡ <span id="bat">100</span>% · тень <span id="eta">—</span>s</div>
+    </header>
+    <canvas id="map"></canvas>
+    <div class="contracts" id="contracts"></div>
+    <div id="log"></div>
+    <div class="bar">
+      <button class="ghost" id="new">НОВАЯ</button>
+      <button class="ghost" id="auto">АВТО</button>
+      <button id="deploy">ПУСК</button>
+    </div>
+    <script>
+      const canvas = document.getElementById("map");
+      const ctx = canvas.getContext("2d");
+      let game = null;
+      let ws = null;
+      let gameId = null;
+      let wsIntentionalClose = false;
+      let view = { ox: 0, oy: 0, size: 40 };
+
+      const colors = {
+        base: "#c9a227",
+        regolith: "#7a8088",
+        solar_plateau: "#d4b44a",
+        crater: "#3a2f2a",
+        ridge: "#6d6360",
+        dust_field: "#a09070",
+        cold_sink: "#2e86ab",
+      };
+
+      function hexToPixel(q, r, size) {
+        return {
+          x: size * (Math.sqrt(3) * q + Math.sqrt(3) / 2 * r),
+          y: size * (1.5 * r),
+        };
+      }
+
+      function computeView(g) {
+        const w = canvas.clientWidth;
+        const h = canvas.clientHeight;
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        for (const hex of g.map.hexes) {
+          const p = hexToPixel(hex.q, hex.r, 1);
+          minX = Math.min(minX, p.x);
+          maxX = Math.max(maxX, p.x);
+          minY = Math.min(minY, p.y);
+          maxY = Math.max(maxY, p.y);
+        }
+        const pad = 1.8;
+        const bw = (maxX - minX + pad * 2) || 1;
+        const bh = (maxY - minY + pad * 2) || 1;
+        const size = Math.min((w * 0.88) / bw, (h * 0.88) / bh) * 0.95;
+        const cx = (minX + maxX) / 2;
+        const cy = (minY + maxY) / 2;
+        return {
+          size: Math.max(size, 28),
+          ox: w / 2 - cx * size,
+          oy: h / 2 - cy * size,
+        };
+      }
+
+      function world(hex) {
+        const p = hexToPixel(hex.q, hex.r, view.size);
+        return { x: view.ox + p.x, y: view.oy + p.y };
+      }
+
+      function resize() {
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        canvas.width = canvas.clientWidth * dpr;
+        canvas.height = canvas.clientHeight * dpr;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        if (game) view = computeView(game);
+        draw();
+      }
+
+      function drawHex(x, y, fill, stroke, glow) {
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const a = Math.PI / 180 * (60 * i - 30);
+          const px = x + view.size * Math.cos(a);
+          const py = y + view.size * Math.sin(a);
+          i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        if (glow) {
+          ctx.shadowColor = glow;
+          ctx.shadowBlur = 14;
+        }
+        ctx.fillStyle = fill;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = stroke || "#1c242d";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+
+      function drawEarth(w, h) {
+        const ex = w - 36, ey = 28, er = 14;
+        const g = ctx.createRadialGradient(ex - 4, ey - 4, 2, ex, ey, er);
+        g.addColorStop(0, "#6eb5ff");
+        g.addColorStop(0.6, "#2e86ab");
+        g.addColorStop(1, "#0b0f14");
+        ctx.beginPath();
+        ctx.arc(ex, ey, er, 0, Math.PI * 2);
+        ctx.fillStyle = g;
+        ctx.fill();
+        ctx.globalAlpha = 0.35;
+        ctx.fillStyle = "#fff";
+        ctx.font = "10px sans-serif";
+        ctx.fillText("EARTH", ex - 22, ey + 28);
+        ctx.globalAlpha = 1;
+      }
+
+      function terminatorX(g) {
+        const dir = g.map.terminator.direction;
+        const pos = g.map.terminator.pos;
+        const hexes = g.map.hexes;
+        let minPx = Infinity, maxPx = -Infinity;
+        for (const hex of hexes) {
+          const p = hexToPixel(hex.q, hex.r, view.size);
+          minPx = Math.min(minPx, p.x);
+          maxPx = Math.max(maxPx, p.x);
+        }
+        const span = maxPx - minPx + view.size * 4;
+        if (dir === "west") {
+          return view.ox + maxPx - (pos + 0.5) * view.size * 0.85;
+        }
+        return view.ox + minPx + (pos + 0.5) * view.size * 0.85;
+      }
+
+      function drawShadowBand(g, w, h) {
+        const tx = terminatorX(g);
+        const grad = ctx.createLinearGradient(tx - 80, 0, tx + 40, 0);
+        grad.addColorStop(0, "rgba(11,15,20,0)");
+        grad.addColorStop(0.35, "rgba(46,134,171,0.12)");
+        grad.addColorStop(0.55, "rgba(11,15,20,0.55)");
+        grad.addColorStop(1, "rgba(5,8,12,0.92)");
+        ctx.fillStyle = grad;
+        if (g.map.terminator.direction === "west") {
+          ctx.fillRect(0, 0, tx + 20, h);
+        } else {
+          ctx.fillRect(tx - 20, 0, w - tx + 20, h);
+        }
+        ctx.strokeStyle = "rgba(201,162,39,0.55)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(tx, 0);
+        ctx.lineTo(tx, h);
+        ctx.stroke();
+        ctx.strokeStyle = "rgba(201,162,39,0.2)";
+        ctx.lineWidth = 6;
+        ctx.stroke();
+      }
+
+      function drawStars(w, h, tx, west) {
+        ctx.fillStyle = "rgba(255,255,255,0.35)";
+        for (let i = 0; i < 40; i++) {
+          const sx = (i * 97) % w;
+          const sy = (i * 53) % h;
+          if ((!west && sx > tx) || (west && sx < tx)) {
+            ctx.fillRect(sx, sy, 1.2, 1.2);
+          }
+        }
+      }
+
+      function roverPixel(g) {
+        const cur = world({ q: g.rover.q, r: g.rover.r });
+        if (g.rover.path && g.rover.path.length && g.rover.progress > 0) {
+          const [q, r] = g.rover.path[0].split(",").map(Number);
+          const nxt = world({ q, r });
+          const p = g.rover.progress;
+          return { x: cur.x + (nxt.x - cur.x) * p, y: cur.y + (nxt.y - cur.y) * p };
+        }
+        return cur;
+      }
+
+      function draw() {
+        const w = canvas.clientWidth, h = canvas.clientHeight;
+        ctx.clearRect(0, 0, w, h);
+        if (!game) return;
+        view = computeView(game);
+        drawEarth(w, h);
+        const tx = terminatorX(game);
+        drawStars(w, h, tx, game.map.terminator.direction === "west");
+        drawShadowBand(game, w, h);
+
+        const pathSet = new Set(game.rover.path || []);
+        for (const hex of game.map.hexes) {
+          const p = world(hex);
+          let fill = colors[hex.type] || "#666";
+          if (hex.inShadow) fill = "#121a22";
+          else if (hex.type === "solar_plateau") fill = "#c9a22755";
+          const stroke = pathSet.has(hex.id) ? "#f0f0f0" : hex.inShadow ? "#243040" : "#2a333c";
+          const glow = hex.type === "base" ? "rgba(201,162,39,0.5)" : null;
+          drawHex(p.x, p.y, fill, stroke, glow);
+          if (hex.phaseEta > 0 && hex.phaseEta < 120 && !hex.inShadow) {
+            ctx.fillStyle = "rgba(201,162,39,0.7)";
+            ctx.font = `${Math.max(9, view.size * 0.22)}px sans-serif`;
+            ctx.textAlign = "center";
+            ctx.fillText(Math.ceil(hex.phaseEta) + "s", p.x, p.y + 4);
+          }
+        }
+
+        const rp = roverPixel(game);
+        ctx.beginPath();
+        ctx.arc(rp.x, rp.y, view.size * 0.22, 0, Math.PI * 2);
+        ctx.fillStyle = game.rover.state === "stranded" ? "#c44" : "#fff";
+        ctx.shadowColor = "#fff";
+        ctx.shadowBlur = game.rover.state === "moving" ? 12 : 4;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        document.getElementById("t").textContent = (game.t || 0).toFixed(1);
+        document.getElementById("bat").textContent = Math.max(0, game.rover.battery).toFixed(0);
+        const here = game.map.hexes.find((x) => x.id === game.rover.hex);
+        document.getElementById("eta").textContent = here ? here.phaseEta.toFixed(0) : "—";
+        document.getElementById("seed").textContent = game.seed;
+      }
+
+      function renderContracts() {
+        const el = document.getElementById("contracts");
+        el.innerHTML = "";
+        if (!game) return;
+        for (const c of game.contracts) {
+          const d = document.createElement("div");
+          d.className = "card" + (c.status === "accepted" || c.status === "in_transit" ? " active" : "");
+          d.innerHTML = `<div>${c.title}</div><div>${c.status} · ${c.weight}</div>`;
+          d.onclick = () => {
+            if (ws && ws.readyState === 1 && c.status === "queued") {
+              ws.send(JSON.stringify({ type: "accept_contract", contractId: c.id }));
+            }
+          };
+          el.appendChild(d);
+        }
+      }
+
+      function log(msg) {
+        const el = document.getElementById("log");
+        el.textContent = msg + "\n" + el.textContent.slice(0, 400);
+      }
+
+      function apply(msg) {
+        game = msg;
+        if (msg.deltaEvents) {
+          for (const e of msg.deltaEvents) {
+            if (e.kind !== "tick" && e.kind !== "battery_low") log(`${e.t}s · ${e.kind}`);
+          }
+        }
+        if (msg.type === "game_over") log("ИТОГ: " + (msg.outcome || "signal_lost"));
+        renderContracts();
+        draw();
+      }
+
+      function connect(id) {
+        wsIntentionalClose = true;
+        if (ws) ws.close();
+        wsIntentionalClose = false;
+        gameId = id;
+        const proto = location.protocol === "https:" ? "wss" : "ws";
+        ws = new WebSocket(`${proto}://${location.host}/ws/game/${id}`);
+        ws.onmessage = (ev) => apply(JSON.parse(ev.data));
+        ws.onclose = () => {
+          if (!wsIntentionalClose && gameId) {
+            log("переподключение…");
+            setTimeout(() => connect(gameId), 800);
+          }
+        };
+        ws.onerror = () => log("ws error");
+      }
+
+      async function newGame() {
+        wsIntentionalClose = true;
+        if (ws) ws.close();
+        wsIntentionalClose = false;
+        const res = await fetch("/api/v1/games", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rover: "swift" }),
+        });
+        const data = await res.json();
+        apply(data);
+        connect(data.id);
+      }
+
+      canvas.addEventListener("click", (ev) => {
+        if (!game || !ws || ws.readyState !== 1) return;
+        const rect = canvas.getBoundingClientRect();
+        const x = ev.clientX - rect.left;
+        const y = ev.clientY - rect.top;
+        let best = null, bestD = 1e9;
+        for (const hex of game.map.hexes) {
+          const p = world(hex);
+          const dx = p.x - x, dy = p.y - y;
+          const d = dx * dx + dy * dy;
+          if (d < bestD) { bestD = d; best = hex; }
+        }
+        if (best && bestD < view.size * view.size * 1.4) {
+          ws.send(JSON.stringify({ type: "goto", hexId: best.id }));
+        }
+      });
+
+      document.getElementById("deploy").onclick = () => {
+        if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: "deploy" }));
+      };
+      document.getElementById("auto").onclick = () => {
+        if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: "autonomy" }));
+      };
+      document.getElementById("new").onclick = newGame;
+      window.addEventListener("resize", resize);
+      resize();
+      newGame();
+    </script>
   </body>
 </html>

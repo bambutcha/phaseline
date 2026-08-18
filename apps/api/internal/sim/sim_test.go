@@ -177,3 +177,30 @@ func TestPredictMatchesMoveCost(t *testing.T) {
 		t.Fatalf("expected drain, start=%v end=%v cost=%v", s.Rover.Battery, pred.EndBattery, cost)
 	}
 }
+
+func TestGoToFindsPath(t *testing.T) {
+	s := NewGame("MCC-TEST", RoverSwift)
+	from := Axial{Q: s.Rover.Q, R: s.Rover.R}
+	var to Axial
+	okDest := false
+	for _, h := range s.Map {
+		if h.Axial() == from || h.Impassable {
+			continue
+		}
+		to = h.Axial()
+		okDest = true
+		break
+	}
+	if !okDest {
+		t.Fatal("no dest")
+	}
+	if err := s.GoTo(to.ID()); err != nil {
+		t.Fatal(err)
+	}
+	if len(s.Rover.Path) == 0 {
+		t.Fatal("empty path")
+	}
+	if s.Rover.Path[len(s.Rover.Path)-1] != to {
+		t.Fatalf("end=%v want %v", s.Rover.Path[len(s.Rover.Path)-1], to)
+	}
+}

@@ -1,12 +1,16 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"phaseline/internal/db"
@@ -31,7 +35,9 @@ type createGameResponse struct {
 }
 
 func New(hub *game.Hub, pool *pgxpool.Pool) *Server {
-	return &Server{Hub: hub, Pool: pool, Query: db.New(pool)}
+	s := &Server{Hub: hub, Pool: pool, Query: db.New(pool)}
+	hub.OnFinish = s.persistFinish
+	return s
 }
 
 func (s *Server) Routes(r *gin.Engine) {
@@ -43,7 +49,10 @@ func (s *Server) Routes(r *gin.Engine) {
 	v1.POST("/games/:id/deploy", s.deploy)
 	v1.POST("/games/:id/reroute", s.reroute)
 	v1.POST("/games/:id/autonomy", s.autonomy)
+	v1.POST("/games/:id/goto", s.gotoHex)
+	v1.GET("/games/:id/blackbox", s.blackbox)
 	v1.GET("/seeds/:seed", s.seedPreview)
+	r.GET("/ws/game/:id", s.wsGame)
 }
 
 func writeErr(c *gin.Context, status int, code, msg string) {
@@ -241,6 +250,87 @@ func (s *Server) seedPreview(c *gin.Context) {
 			"terminator": snap.Map.Terminator,
 		},
 	})
+}
+
+type gotoRequest struct {
+	Hex string `json:"hex"`
+}
+
+func (s *Server) gotoHex(c *gin.Context) {
+	id, ok := s.runtimeID(c)
+	if !ok {
+		return
+	}
+	var req gotoRequest
+	if err := c.ShouldBindJSON(&req); err != nil || req.Hex == "" {
+		writeErr(c, http.StatusBadRequest, "invalid", "hex required")
+		return
+	}
+	var pred sim.Prediction
+	rt, err := s.Hub.Mutate(id, func(st *sim.GameState) error {
+		if err := st.GoTo(req.Hex); err != nil {
+			return err
+		}
+		pred = st.Predict(append([]sim.Axial(nil), st.Rover.Path...))
+		return nil
+	})
+	if err != nil {
+		if errors.Is(err, game.ErrNotFound) {
+			writeErr(c, http.StatusNotFound, "not_found", "game not found")
+			return
+		}
+		mapSimErr(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"game":       createGameResponse{ID: rt.ID, Snapshot: rt.State.Snapshot()},
+		"prediction": pred,
+	})
+}
+
+func (s *Server) blackbox(c *gin.Context) {
+	id, ok := s.runtimeID(c)
+	if !ok {
+		return
+	}
+	rt, err := s.Hub.Mutate(id, func(*sim.GameState) error { return nil })
+	if err != nil {
+		writeErr(c, http.StatusNotFound, "not_found", "game not found")
+		return
+	}
+	if rt.State.Status != sim.StatusFinished {
+		writeErr(c, http.StatusConflict, "conflict", "game not finished")
+		return
+	}
+	c.JSON(http.StatusOK, createGameResponse{ID: rt.ID, Snapshot: rt.State.Snapshot()})
+}
+
+func (s *Server) persistFinish(id uuid.UUID, st *sim.GameState) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := s.Query.UpdateGameStatus(ctx, db.UpdateGameStatusParams{
+		ID:          id,
+		Status:      string(st.Status),
+		ColonyScore: int32(st.ColonyScore),
+		EarthScore:  int32(st.EarthScore),
+		FinishedAt:  pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	})
+	if err != nil {
+		slog.Error("persist finish", "err", err)
+		return
+	}
+	for _, ev := range st.Events {
+		payload, _ := json.Marshal(ev.Payload)
+		if _, err := s.Query.InsertEvent(ctx, db.InsertEventParams{
+			GameID:      id,
+			T:           ev.T,
+			Kind:        ev.Kind,
+			PayloadJson: payload,
+		}); err != nil {
+			slog.Error("persist event", "err", err)
+			return
+		}
+	}
 }
 
 func mapSimErr(c *gin.Context, err error) {
