@@ -11,6 +11,8 @@ const (
 	RerouteFreeCount      = 1
 	ContractsPerGame      = 6
 	MaxActiveContracts    = 2
+	SalvageCount          = 3
+	SalvageValue          = 8
 	MapHexCount           = 30
 	MapCols               = 6
 	MapRows               = 5

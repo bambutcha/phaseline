@@ -11,6 +11,7 @@ Workspace: `/home/bambutcha/Files/Knowledge/IT/projects/Teams/Exp/phaseline`
 - Preview батареи = тот же код, что tick
 - Mobile-first, Canvas 2D
 - pgx + sqlc + goose, Gin, Postgres, Caddy, Compose
+- Next.js + Tailwind + Zustand + TanStack Query, Canvas 2D
 - Команды игрока **без** задержки связи
 
 ## Не делать в v1

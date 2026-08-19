@@ -104,6 +104,14 @@ func TestSeedDeterministic(t *testing.T) {
 			t.Fatalf("contract %d mismatch", i)
 		}
 	}
+	if len(a.Salvage) != len(b.Salvage) {
+		t.Fatal("salvage len")
+	}
+	for i := range a.Salvage {
+		if a.Salvage[i] != b.Salvage[i] {
+			t.Fatalf("salvage %d mismatch", i)
+		}
+	}
 }
 
 func TestDifferentSeedsDiffer(t *testing.T) {

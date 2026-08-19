@@ -2,7 +2,7 @@
 
 Авторская реализация тестового задания **Moon Courier Crisis** из [вакансии](https://docs.google.com/document/d/1t9fOhAPbkDqP0WqGr1We56EqBtXoZbGPVVI5HePcmCs/edit).
 
-Симулятор лунной доставки: гекс-карта, два ровера, заказы с весом и риском, батарея, тень-терминатор, цель смены. Стек любой — выбран Go + Postgres + Canvas 2D.
+Симулятор лунной доставки: гекс-карта, два ровера, заказы с весом и риском, батарея, тень-терминатор, цель смены. Стек: Go + Gin + pgx + sqlc + Postgres + WS + Next + Tailwind + Zustand + TanStack Query + Caddy + Compose.
 
 Репозиторий: https://github.com/bambutcha/phaseline
 
@@ -47,7 +47,7 @@ Postgres не публикуется на хост `:5432`, только вну�
 | Счёт обновляется | Colony / Earth после сдачи |
 | Цель победы | 100 колонии за ~180 с; пиррова победа если Земля < 40 |
 
-Свои решения поверх ТЗ: тень как стена, triage (всех не спасти), ghost прошлого забега, share `/s/MCC-XXXX`, Black Box.
+Свои решения поверх ТЗ: тень как стена, triage (всех не спасти), ghost прошлого забега, share `/s/MCC-XXXX`, Black Box, кассеты (+8 колонии без сдачи).
 
 ---
 
@@ -65,7 +65,7 @@ Postgres не публикуется на хост `:5432`, только вну�
    - клик по новой клетке **не откатывает** ровер: текущее ребро доезжается, дальше новый путь.
 4. Canvas рисует snapshot 60 FPS: позиция на ребре интерполируется, **линия — только оставшийся путь** от ровера вперёд.
 
-Победа считается в конце смены (таймер / карта в тени / оба stranded), не в момент набора 100 очков.
+Победа считается в конце смены (таймер / карта в тени / оба stranded / нечего везти), не в момент набора 100 очков. Если заказы кончились, остаются бирюзовые кассеты.
 
 ---
 
@@ -86,7 +86,7 @@ PostgreSQL 16, миграции goose, запросы sqlc (без GORM).
 
 ## Решения, которые стоит объяснить
 
-- **Не Next.js.** Для v1 достаточно одного Canvas и nginx: меньше движущихся частей, mobile-first без гидрации.
+- **Next.js на канон-стеке.** Меню, `/play/[id]`, шаринг `/s/[seed]`, HUD в React, карта на Canvas 2D. Браузер не ходит на `:8080` — только через Caddy.
 - **Два ровера сразу.** В ТЗ выбор loadout; так быстрее видно разницу Swift/Hauler и слоты.
 - **Тень непроходима.** Иначе терминатор — декоративный таймер. Клик по тёмной клетке отклоняется.
 - **Уникальные пины забора.** Лёгкий и тяжёлый не стоят на одном гексе.
@@ -96,17 +96,23 @@ PostgreSQL 16, миграции goose, запросы sqlc (без GORM).
 
 ## Как проверяли
 
-- `go test ./...` — тик, тень, уникальные пины, reroute без отката, greedy-winrate.
+- `go test ./...` — тик, тень, уникальные пины, reroute без отката, кассеты, greedy-winrate.
 - Playtest через `docker compose up --build`.
-- Скриншоты в `screenshots/`.
+- Скриншоты: [desktop](screenshots/desktop.png), [mobile](screenshots/mobile.png), [tutorial](screenshots/tutorial.png).
 
 ---
 
 ## Скриншоты
 
-- [desktop](screenshots/desktop.png)
-- [mobile](screenshots/mobile.png)
-- [tutorial](screenshots/tutorial.png)
+- [Рабочий стол](screenshots/desktop.png)
+- [Телефон](screenshots/mobile.png) — карточки листаются горизонтально, легенда скрыта
+- [Туториал](screenshots/tutorial.png)
+
+![PHASELINE — рабочий стол](screenshots/desktop.png)
+
+![PHASELINE — телефон](screenshots/mobile.png)
+
+![PHASELINE — туториал](screenshots/tutorial.png)
 
 ---
 
@@ -114,8 +120,8 @@ PostgreSQL 16, миграции goose, запросы sqlc (без GORM).
 
 Вакансия разрешает AI. Честно:
 
-- **Сгенерировано:** каркас Compose/Caddy, большая часть Canvas UI, sqlc, черновики текстов.
-- **Задано и проверено человеком:** формулы тика, детерминизм сида, правила груза и тени, reroute с фиксацией ребра, баланс, тесты, структура README.
+- **Сгенерировано:** каркас Compose/Caddy, Next/HUD/Canvas, sqlc, черновики текстов.
+- **Задано и проверено человеком:** формулы тика, детерминизм сида, правила груза и тени, reroute с фиксацией ребра, кассеты, баланс, тесты, структура README.
 - **Инструмент:** Cursor (агент в репозитории). На этапе задания доступы работодателя не использовались.
 - **Не использовалось:** LLM в рантайме игры.
 
@@ -123,15 +129,15 @@ PostgreSQL 16, миграции goose, запросы sqlc (без GORM).
 
 ## Стек и структура
 
-Go, Gin, pgx, sqlc, goose, WebSocket, PostgreSQL 16, Canvas 2D, Caddy, Compose.
+Go, Gin, pgx, sqlc, goose, WebSocket, PostgreSQL 16, Next.js, Tailwind, Zustand, TanStack Query, Canvas 2D, Caddy, Compose.
 
 Без Redis, Kafka, MinIO, GORM, Phaser.
 
 ```text
 apps/api                    API и server-authoritative sim
 apps/api/internal/sim       тик, A*, тень, грузы
-apps/web/public/index.html  клиент
-deploy/Caddyfile            /api /ws /health /s/:seed
+apps/web                    Next.js клиент
+deploy/Caddyfile            /api /ws /health → api, остальное → web
 docs/                       GDD и спецификации
 screenshots/                интерфейс
 ```

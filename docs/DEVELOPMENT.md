@@ -15,17 +15,18 @@
 | **1** | `internal/sim` + hex + seed + тесты | ✅ `go test ./internal/sim/...` |
 | **2** | goose + sqlc + `POST /games` | ✅ |
 | **3** | Tick + WS + deploy | ✅ |
-| **4** | Canvas + mobile layout | ✅ static Canvas, не Next.js |
+| **4** | Canvas + mobile layout | ✅ Next.js App Router, Tailwind, Canvas 2D |
 | **5** | Контракты, грузы, кризис | ✅ |
 | **6** | Ghost + `/s/[seed]` + Black Box | ✅ |
 | **7** | Juice, звук, туториал | ✅ обучение, бипы, разворот |
-| **8** | README, AI-секция | ✅ скриншоты — сделать при сдаче |
+| **8** | README, AI-секция | ✅ [desktop](../screenshots/desktop.png), [mobile](../screenshots/mobile.png), [tutorial](../screenshots/tutorial.png) |
 
 ## Команды (когда код появится)
 
 ```bash
-docker compose up --build    # :80
+docker compose up --build    # :80, web собирается внутри образа
 cd apps/api && go test ./...
+cd apps/web && npm test && npm run build   # опционально, без Docker
 cd apps/api && sqlc generate
 cd apps/api && goose -dir db/migrations postgres "$DATABASE_URL" up
 ```
@@ -66,10 +67,10 @@ Go + Gin + pgx + sqlc + Postgres + WS + Next + Tailwind + Zustand + TanStack Que
 
 Redis / Kafka / MinIO — нет.
 
-## Чеклист перед первой строкой UI
+## Чеклист sim / health (закрыт)
 
-- [ ] `sim.Tick` двигает терминатор
-- [ ] тень в axial, не pixelX
-- [ ] MoveCost совпадает в preview и tick
-- [ ] cubeRound покрыт тестом
-- [ ] `GET /health` 200
+- [x] `sim.Tick` двигает терминатор
+- [x] тень в axial, не pixelX
+- [x] MoveCost совпадает в preview и tick
+- [x] cubeRound покрыт тестом
+- [x] `GET /health` 200

@@ -14,6 +14,7 @@ type Snapshot struct {
 	ActiveRover     RoverType    `json:"activeRover"`
 	Map             MapView      `json:"map"`
 	Contracts       []Contract   `json:"contracts"`
+	Salvage         []Salvage    `json:"salvage,omitempty"`
 	Crisis          CrisisView   `json:"crisis"`
 	ColonyScore     int          `json:"colonyScore"`
 	EarthScore      int          `json:"earthScore"`
@@ -104,6 +105,7 @@ func (s *GameState) Snapshot() Snapshot {
 		ActiveRover:     s.R().Type,
 		Map:             MapView{Hexes: hexes, Terminator: s.Terminator},
 		Contracts:       append([]Contract(nil), s.Contracts...),
+		Salvage:         append([]Salvage(nil), s.Salvage...),
 		Crisis:          CrisisView{Kind: s.CrisisKind, FiresAt: s.CrisisAt, Fired: s.CrisisFired},
 		ColonyScore:     s.ColonyScore,
 		EarthScore:      s.EarthScore,

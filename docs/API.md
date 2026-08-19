@@ -46,7 +46,7 @@ WS: `/ws/game/{id}`
 }
 ```
 
-Превью публичного сида **не** отдаёт список контрактов (см. `GET /seeds/{seed}`).
+Превью публичного сида **не** отдаёт список контрактов (см. `GET /seeds/{seed}`). Snapshot партии включает `rovers`, `salvage`, `colonyScore`, `earthScore`.
 
 ### `GET /api/v1/games/{id}`
 
@@ -84,7 +84,7 @@ WS: `/ws/game/{id}`
 
 ### `GET /api/v1/seeds/{seed}`
 
-Публично, без спойлеров: размер карты, направление тени, **не** контракты и не кризис.
+Публично, без спойлеров: `seed`, `layout`, размер карты, направление тени. **Не** контракты, не кризис, не кассеты.
 
 ---
 
@@ -95,14 +95,17 @@ WS: `/ws/game/{id}`
 Client → server:
 
 ```json
-{ "type": "accept_contract", "contractId": "uuid" }
+{ "type": "select_rover", "rover": "swift" }
+{ "type": "dispatch", "contractId": "c0", "rover": "hauler" }
+{ "type": "goto", "hexId": "2,1", "rover": "swift" }
+{ "type": "accept_contract", "contractId": "c0" }
 { "type": "set_route", "hexPath": ["0,0", "1,0"] }
 { "type": "deploy" }
 { "type": "reroute", "hexPath": [] }
 { "type": "autonomy" }
 ```
 
-REST и WS — **одинаковые intent**. Можно пользоваться только REST на время отладки.
+Игровой клиент ходит в основном через `dispatch` / `goto` / `select_rover`. REST и WS — одинаковые intent.
 
 Server → client:
 
@@ -132,4 +135,4 @@ Server → client:
 
 ## События (`kind`)
 
-`game_start`, `contract_accepted`, `deploy`, `reroute`, `hex_entered`, `entered_shadow`, `left_shadow`, `battery_low`, `deliver`, `contract_failed`, `autonomy_used`, `crisis`, `stranded`, `game_over`.
+`game_start`, `contract_accepted`, `dispatch`, `goto`, `hex_entered`, `entered_shadow`, `deliver`, `salvage`, `salvage_lost`, `contract_failed`, `crisis`, `stranded`, `game_over`.

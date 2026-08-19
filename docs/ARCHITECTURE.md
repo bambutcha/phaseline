@@ -54,11 +54,11 @@ db/queries          — sqlc SQL
 Один seed обязан давать:
 
 - одинаковую карту (типы гексов, pickup/dropoff баз);
-- одинаковые контракты;
+- одинаковые контракты и кассеты;
 - одинаковый кризис и время срабатывания;
 - одинаковое направление терминатора.
 
-Тест: `Generate(seed)` дважды → `reflect.DeepEqual`.
+Тест: `NewGame(seed)` дважды → одинаковые map / contracts / salvage.
 
 ## Состояние партии (в памяти + DB)
 
@@ -84,7 +84,7 @@ app/s/[seed]/page.tsx     превью сида без спойлеров кон
 stores/gameStore.ts       Zustand snapshot
 lib/hex.ts                math, зеркало Go sim/hex.go
 lib/api.ts                REST
-lib/ws.ts                 WebSocket
+hooks/useGameSession.ts   WebSocket + intents
 components/game/GameCanvas.tsx
 ```
 

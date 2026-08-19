@@ -252,7 +252,8 @@ func (s *Server) seedPreview(c *gin.Context) {
 	st := sim.NewGame(c.Param("seed"), sim.RoverSwift)
 	snap := st.Snapshot()
 	c.JSON(http.StatusOK, gin.H{
-		"seed": snap.Seed,
+		"seed":   snap.Seed,
+		"layout": snap.Layout,
 		"map": gin.H{
 			"hexCount":   len(snap.Map.Hexes),
 			"terminator": snap.Map.Terminator,

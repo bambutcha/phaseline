@@ -153,6 +153,7 @@ func NewGame(seed string, rover RoverType) *GameState {
 	}
 	g.Contracts = g.rollContracts(rng, westBase.ID(), eastBase.ID(), ids)
 	g.boostDeliverableCeiling()
+	g.Salvage = g.rollSalvage(rng, ids)
 	return g
 }
 
@@ -324,4 +325,34 @@ func (s *GameState) pickUniqueHex(rng *rand.Rand, ids []string, used map[string]
 		return fallback
 	}
 	return ids[0]
+}
+
+func (s *GameState) rollSalvage(rng *rand.Rand, ids []string) []Salvage {
+	used := map[string]bool{}
+	for _, r := range s.Rovers {
+		used[HexID(r.Q, r.R)] = true
+	}
+	for _, c := range s.Contracts {
+		used[c.Pickup] = true
+	}
+	for _, h := range s.Map {
+		if h.Type == TypeBase {
+			used[h.ID()] = true
+		}
+	}
+	out := make([]Salvage, 0, SalvageCount)
+	for i := 0; i < SalvageCount; i++ {
+		hex := s.pickUniqueHex(rng, ids, used, i == 0)
+		if used[hex] {
+			break
+		}
+		used[hex] = true
+		out = append(out, Salvage{
+			ID:     fmt.Sprintf("s%d", i),
+			Hex:    hex,
+			Value:  SalvageValue,
+			Status: SalvageAvailable,
+		})
+	}
+	return out
 }

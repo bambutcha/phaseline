@@ -41,6 +41,21 @@ const (
 	ContractLostShadow ContractStatus = "lost_to_shadow"
 )
 
+type SalvageStatus string
+
+const (
+	SalvageAvailable SalvageStatus = "available"
+	SalvageTaken     SalvageStatus = "taken"
+	SalvageLost      SalvageStatus = "lost"
+)
+
+type Salvage struct {
+	ID     string        `json:"id"`
+	Hex    string        `json:"hex"`
+	Value  int           `json:"value"`
+	Status SalvageStatus `json:"status"`
+}
+
 type RoverState string
 
 const (
@@ -144,6 +159,7 @@ type GameState struct {
 	Rovers       []Rover
 	Active       int
 	Contracts    []Contract
+	Salvage      []Salvage
 	ColonyScore  int
 	EarthScore   int
 	CrisisKind   string

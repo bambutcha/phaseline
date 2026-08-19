@@ -472,6 +472,15 @@ func TestPickupsDoNotShareHex(t *testing.T) {
 			}
 			seen[c.Pickup] = c.ID
 		}
+		for _, sv := range s.Salvage {
+			if prev, ok := seen[sv.Hex]; ok {
+				t.Fatalf("seed %s: salvage %s overlaps %s", seed, sv.Hex, prev)
+			}
+			seen[sv.Hex] = sv.ID
+		}
+		if len(s.Salvage) != SalvageCount {
+			t.Fatalf("seed %s: salvage %d want %d", seed, len(s.Salvage), SalvageCount)
+		}
 	}
 }
 
@@ -544,6 +553,8 @@ func greedyColony(seed string) int {
 			}
 			if best >= 0 {
 				_ = s.Dispatch(s.Contracts[best].ID)
+			} else {
+				s.seekSalvage()
 			}
 		}
 		s.Active = sel
@@ -618,5 +629,63 @@ func TestGreedyWinRateIsAChallenge(t *testing.T) {
 	}
 	if wins == 0 && avg < float64(ColonyWinThreshold)/4 {
 		t.Fatalf("greedy never scores — too hard (avg=%.1f)", avg)
+	}
+}
+
+func TestSalvagePickupAddsColony(t *testing.T) {
+	s := NewGame("MCC-TEST", RoverSwift)
+	if len(s.Salvage) == 0 {
+		t.Fatal("expected salvage caches")
+	}
+	s.Status = StatusActive
+	sv := s.Salvage[0]
+	ax, err := ParseHexID(sv.Hex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.R().Q, s.R().R = ax.Q, ax.R
+	s.R().State = RoverIdle
+	before := s.ColonyScore
+	s.trySalvage()
+	if s.ColonyScore != before+sv.Value {
+		t.Fatalf("score=%d want %d", s.ColonyScore, before+sv.Value)
+	}
+	if s.Salvage[0].Status != SalvageTaken {
+		t.Fatalf("status=%s", s.Salvage[0].Status)
+	}
+}
+
+func TestSalvageLostToShadow(t *testing.T) {
+	s := NewGame("MCC-TEST", RoverSwift)
+	s.Status = StatusActive
+	sv := s.Salvage[0]
+	ax, _ := ParseHexID(sv.Hex)
+	s.Terminator.Direction = DirEast
+	s.Terminator.Pos = float64(ax.Q) + 1
+	s.tickSalvage()
+	if s.Salvage[0].Status != SalvageLost {
+		t.Fatalf("status=%s", s.Salvage[0].Status)
+	}
+}
+
+func TestShiftContinuesForSalvageAfterContracts(t *testing.T) {
+	s := NewGame("MCC-TEST", RoverSwift)
+	s.Status = StatusActive
+	s.CrisisFired = true
+	s.CrisisKind = "dust_storm"
+	for i := range s.Contracts {
+		s.Contracts[i].Status = ContractDelivered
+	}
+	s.ColonyScore = 90
+	s.checkEnd()
+	if s.Status != StatusActive {
+		t.Fatalf("status=%s, salvage should keep the shift open", s.Status)
+	}
+	for i := range s.Salvage {
+		s.Salvage[i].Status = SalvageTaken
+	}
+	s.checkEnd()
+	if s.Status != StatusFinished || s.EndReason != "delivered" {
+		t.Fatalf("status=%s reason=%s", s.Status, s.EndReason)
 	}
 }

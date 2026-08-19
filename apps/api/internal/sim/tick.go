@@ -26,6 +26,7 @@ func (s *GameState) Tick(dt float64) []Event {
 
 	s.tickCargo(dt)
 	s.tickCrisis()
+	s.tickSalvage()
 	s.checkEnd()
 	return s.Events[start:]
 }
@@ -135,6 +136,7 @@ func (s *GameState) tickMove(dt float64) {
 		}
 	}
 	s.tryPickupDrop()
+	s.trySalvage()
 	if len(r.Path) == 0 {
 		r.State = RoverIdle
 		s.continueJob()
@@ -482,6 +484,78 @@ func (s *GameState) failCarried(st ContractStatus) {
 	r.Cargo = nil
 }
 
+func (s *GameState) tickSalvage() {
+	sel := s.Active
+	for i := range s.Salvage {
+		sv := &s.Salvage[i]
+		if sv.Status != SalvageAvailable {
+			continue
+		}
+		ax, err := ParseHexID(sv.Hex)
+		if err != nil {
+			continue
+		}
+		if s.Terminator.InShadow(ax.Q) {
+			sv.Status = SalvageLost
+			s.emit("salvage_lost", map[string]any{"id": sv.ID, "hexId": sv.Hex})
+		}
+	}
+	for i := range s.Rovers {
+		s.Active = i
+		s.trySalvage()
+	}
+	s.Active = sel
+}
+
+func (s *GameState) trySalvage() {
+	r := s.R()
+	if r.State == RoverStranded {
+		return
+	}
+	here := HexID(r.Q, r.R)
+	for i := range s.Salvage {
+		sv := &s.Salvage[i]
+		if sv.Status != SalvageAvailable || sv.Hex != here {
+			continue
+		}
+		sv.Status = SalvageTaken
+		s.ColonyScore += sv.Value
+		s.emit("salvage", map[string]any{
+			"id": sv.ID, "hexId": here, "rover": string(r.Type), "colony": sv.Value,
+		})
+	}
+}
+
+func (s *GameState) hasLiveJobs() bool {
+	for _, c := range s.Contracts {
+		switch c.Status {
+		case ContractQueued, ContractAccepted, ContractInTransit:
+			return true
+		}
+	}
+	return false
+}
+
+func (s *GameState) hasLiveSalvage() bool {
+	for _, sv := range s.Salvage {
+		if sv.Status != SalvageAvailable {
+			continue
+		}
+		ax, err := ParseHexID(sv.Hex)
+		if err != nil {
+			continue
+		}
+		if !s.Terminator.InShadow(ax.Q) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *GameState) vipPending() bool {
+	return s.CrisisKind == "vip_override" && !s.CrisisFired
+}
+
 func (s *GameState) checkEnd() {
 	if s.Status != StatusActive {
 		return
@@ -493,6 +567,7 @@ func (s *GameState) checkEnd() {
 			break
 		}
 	}
+	boardClear := !s.hasLiveJobs() && !s.hasLiveSalvage() && !s.vipPending()
 	mapDark := true
 	for _, h := range s.Map {
 		if !s.Terminator.InShadow(h.Q) {
@@ -515,8 +590,10 @@ func (s *GameState) checkEnd() {
 		s.finish("stranded")
 	case mapDark:
 		s.finish("shadow")
-	case allDelivered:
+	case allDelivered && !s.hasLiveSalvage() && !s.vipPending():
 		s.finish("delivered")
+	case boardClear:
+		s.finish("cleared")
 	case s.T >= GameDurationTargetSec:
 		s.finish("time")
 	}

@@ -52,6 +52,8 @@ func densityColony(seed string) int {
 			}
 			if bestID != "" {
 				_ = s.Dispatch(bestID)
+			} else {
+				s.seekSalvage()
 			}
 		}
 		s.Active = sel
@@ -144,5 +146,35 @@ func pumpQueue(s *GameState, roverIdx int, jobs []string, cursor int) int {
 			break
 		}
 	}
+	if s.R().State == RoverIdle {
+		s.seekSalvage()
+	}
 	return cursor
+}
+
+func (s *GameState) seekSalvage() {
+	r := s.R()
+	if r.State != RoverIdle {
+		return
+	}
+	here := Axial{Q: r.Q, R: r.R}
+	best := ""
+	bestD := 1 << 20
+	for _, sv := range s.Salvage {
+		if sv.Status != SalvageAvailable {
+			continue
+		}
+		ax, err := ParseHexID(sv.Hex)
+		if err != nil || s.Terminator.InShadow(ax.Q) {
+			continue
+		}
+		d := CubeDistance(here, ax)
+		if d < bestD {
+			bestD = d
+			best = sv.Hex
+		}
+	}
+	if best != "" {
+		_ = s.GoTo(best)
+	}
 }

@@ -1,16 +1,21 @@
 # Web (`apps/web`)
 
-Сейчас: статическая заглушка (nginx :3000), чтобы `docker compose` поднимал Caddy.
+Next.js 15 App Router + React 19 + TypeScript + Tailwind + Zustand + TanStack Query. Canvas 2D, не Phaser.
 
-**Дальше (фаза 0–4):** заменить на Next.js App Router + React + TypeScript + Tailwind.
+Канон запуска — `docker compose up --build` из корня репозитория. Образ сам делает `npm ci` и `next build`.
+
+Локально без Docker:
 
 ```bash
-# когда начнёте фронт, из этого каталога:
-npx create-next-app@latest . --typescript --tailwind --app --src=false --eslint
+npm test          # hex fixtures
+npm run dev       # :3000, REST проксируется на API :8080
+npm run build
 ```
 
-Сохранить `app/play/[id]`, `app/s/[seed]` из [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md).
+В Docker браузер ходит только через Caddy: `/api/*`, `/ws/*`, `/health`. `NEXT_PUBLIC_API_BASE` пустой.
 
-Canvas 2D, Zustand, TanStack Query. Не Phaser.
+Маршруты:
 
-`NEXT_PUBLIC_API_BASE` пустой в Docker — браузер ходит на `/api` и `/ws` через Caddy.
+- `/` — меню, новая смена, сид
+- `/play/[id]` — смена
+- `/s/[seed]` — шаринг без спойлеров контрактов

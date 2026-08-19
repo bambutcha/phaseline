@@ -114,7 +114,7 @@
 | Скорость | выше | ниже |
 | Батарея | меньше | больше |
 
-Один ровер на забег. Выбор до выезда.
+Оба ровера на смене сразу. Выбор активного — кнопка Swift/Hauler, без задержки связи.
 
 ---
 
@@ -137,7 +137,9 @@ deadline? (sec), specialRule
 | Reactor Rod | reroute после бесплатного → overheat |
 | Helium-3 | много earth, мало colony |
 | Med Seeds | жёсткий deadline |
-| Comm Relay | бонус, если до кризиса |
+| Comm Relay | бонус +8 колонии, если сдан до кризиса |
+
+На карте ещё **3 кассеты**: +8 колонии за заход на клетку, без сдачи и без слота. Тень забирает неподобранные. Если заказы кончились — это запасной заработок до конца смены.
 
 **Статусы:** `queued → accepted → in_transit → delivered | failed | expired | lost_to_shadow`
 
@@ -262,7 +264,7 @@ PWA (manifest + иконки) — nice-to-have, не блокер MVP.
 | Слой | Выбор |
 |---|---|
 | Backend | Go, Gin, **pgx + sqlc**, goose, WebSocket, slog |
-| Frontend | Next.js App Router, React, TypeScript, Tailwind, Zustand, TanStack Query, Canvas 2D, Framer Motion (только панели) |
+| Frontend | Next.js App Router, React, TypeScript, Tailwind, Zustand, TanStack Query, Canvas 2D |
 | DB | PostgreSQL 16 |
 | DevOps | Docker Compose, Caddy |
 
@@ -283,6 +285,7 @@ PWA (manifest + иконки) — nice-to-have, не блокер MVP.
 - [x] Ghost на сиде
 - [x] Share `/s/[seed]`
 - [x] Black Box
+- [x] Кассеты (запасной заработок)
 - [x] Mobile + desktop
 - [x] REST + WebSocket
 - [x] `docker compose up` → игра на :80
@@ -298,42 +301,42 @@ PWA (manifest + иконки) — nice-to-have, не блокер MVP.
 ## 18. Критерии приёмки
 
 1. `docker compose up --build` открывает игру на телефоне и PC (через хост :80).
-2. Новый игрок понимает цель без README за ≤ 30 сек (3 слайда, skip).
+2. Новый игрок понимает цель без README за ≤ 30 сек (4 слайда, skip).
 3. Забег 3–5 минут.
 4. Три разных сида ощущаются по-разному.
 5. Повтор того же сида показывает ghost.
 6. Share seed открывает играбельный сид.
 7. Black Box: лог + вердикт.
 8. README честно описывает AI.
-9. Скриншоты: mobile, desktop, shadow moment, black box.
+9. Скриншоты: [desktop](../screenshots/desktop.png), [mobile](../screenshots/mobile.png), [tutorial](../screenshots/tutorial.png).
 
 ---
 
 ## 19. Туториал
 
-3 слайда, полный текст в [COPY.md](./COPY.md). Skip в `localStorage`.
+4 слайда, полный текст в [COPY.md](./COPY.md). Skip в `localStorage`.
 
 ---
 
 ## 20. Баланс (стартовые константы)
 
-Вынести в `internal/sim/constants.go`. Тюнить после playtest.
+Актуальные числа — `apps/api/internal/sim/constants.go` (тюнить после playtest).
 
 ```yaml
 tick_hz: 10
-game_duration_target_sec: 120
-terminator_speed_hex_per_sec: 0.028
-rover_swift_speed_hex_per_sec: 0.45
-rover_hauler_speed_hex_per_sec: 0.32
-battery_swift: 100
-battery_hauler: 140
+game_duration_target_sec: 180
+rover_swift_speed_hex_per_sec: 0.52
+rover_hauler_speed_hex_per_sec: 0.36
+battery_swift: 80
+battery_hauler: 105
 colony_win_threshold: 100
 earth_pyrrhic_below: 40
 autonomy_charges: 3
 reroute_free_count: 1
-contracts_per_game: 6
 max_active_contracts: 2
-map_hex_count: 12
+salvage_count: 3
+salvage_value: 8
+map_hex_count: 30   # 6×5
 ```
 
 ---
